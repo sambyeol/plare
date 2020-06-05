@@ -10,6 +10,10 @@ $ cd plare
 $ sudo pip install .
 ```
 
+## How to use
+Plare offers classes for language description, lexer generation, and parser generation.
+Detailed usages can be found in [tutorial](tutorial).
+
 ## Uninstallation
 This library is managed by ```pip```. Therefore, you can easily uninstall the tool.
 ```

@@ -8,7 +8,7 @@ setup_params = dict(
   url='https://github.com/HenryLee97/plare',
   author='Henry Lee',
   author_email='gbvrcx@gmail.com',
-  packages=find_packages(exclude=['example',]),
+  packages=find_packages(exclude=['tutorial']),
   setup_requires=[], 
   install_requires=[], 
   dependency_links=[],
