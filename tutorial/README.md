@@ -123,7 +123,7 @@ tree = parser.parse(src)
 ```
 
 ## Interprete
-Each node of the parsed tree have two variable: ```data```, which represents the type of the node, and ```chidren``` which contains the child nodes.
+Each node of the parsed tree have two variable: ```data```, which represents the type of the node, and ```chidren``` which is a list that contains its child nodes.
 Following python code is an interpretation method for the calculator.
 ```python
 def interprete(tree):
