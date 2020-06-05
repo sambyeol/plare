@@ -1,7 +1,7 @@
-from pypar.lexer.lexer import EOF
-from pypar.lexer.lexer import EPSILON
-from pypar.lexer.token import Token
-from pypar.lexer.token import TokenObject
+from plare.lexer.lexer import EOF
+from plare.lexer.lexer import EPSILON
+from plare.lexer.token import Token
+from plare.lexer.token import TokenObject
 
 class Constructor:
 

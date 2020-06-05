@@ -1,4 +1,4 @@
-import pypar.lang.type
+import plare.lang.type
 
 class Tree:
 
@@ -33,7 +33,7 @@ class Constructor:
         raise TypeError('[Error] Constructor {}: Expecting {} arguments, but {} arguments are passed.'.format(self.__name, len(self.__types), len(values)))
 
       if values not in self:
-        raise TypeError('[Error] Constructor {}: Type mismatch. Expecting ({}), but ({}) are given.'.format(self.__name, ', '.join([t.name if isinstance(t, pypar.lang.type.Type) else t.__name__ for t, o in self.__types]), values))
+        raise TypeError('[Error] Constructor {}: Type mismatch. Expecting ({}), but ({}) are given.'.format(self.__name, ', '.join([t.name if isinstance(t, plare.lang.type.Type) else t.__name__ for t, o in self.__types]), values))
 
       return Tree(self.__name, [values])
 
@@ -43,7 +43,7 @@ class Constructor:
       return Tree(self.__name)
 
   def __repr__(self):
-    return self.__name + (' of {}'.format(' * '.join([(t.name if isinstance(t, pypar.lang.type.Type) else t.__name__) + (' list' if o == '*' else ' option' if o == '?' else '') for t, o in self.__types])) if self.__types else '')
+    return self.__name + (' of {}'.format(' * '.join([(t.name if isinstance(t, plare.lang.type.Type) else t.__name__) + (' list' if o == '*' else ' option' if o == '?' else '') for t, o in self.__types])) if self.__types else '')
 
   def __contains__(self, values):
 
@@ -54,18 +54,18 @@ class Constructor:
       t, o = t_o
 
       if o == '?':
-        if not (v is None or (v in t if isinstance(t, pypar.lang.type.Type) else type(v) == t)):
+        if not (v is None or (v in t if isinstance(t, plare.lang.type.Type) else type(v) == t)):
           return False
 
       elif o == '*':
         if type(v) != list:
           return False
         for e in v:
-          if not (e in t if isinstance(t, pypar.lang.type.Type) else type(e) == t):
+          if not (e in t if isinstance(t, plare.lang.type.Type) else type(e) == t):
             return False
 
       else:
-        if not (v in t if isinstance(t, pypar.lang.type.Type) else type(v) == t):
+        if not (v in t if isinstance(t, plare.lang.type.Type) else type(v) == t):
           return False
 
     return True

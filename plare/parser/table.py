@@ -1,11 +1,11 @@
-from pypar.lexer.token import Token
-from pypar.lexer.token import TokenObject
-from pypar.parser.exception import ParsingTableError
-from pypar.parser.exception import ReduceReduceConflict
-from pypar.parser.exception import ShiftReduceConflict
-from pypar.parser.exception import WrongAction
-from pypar.parser.rule import ARule
-from pypar.parser.rule import Rule
+from plare.lexer.token import Token
+from plare.lexer.token import TokenObject
+from plare.parser.exception import ParsingTableError
+from plare.parser.exception import ReduceReduceConflict
+from plare.parser.exception import ShiftReduceConflict
+from plare.parser.exception import WrongAction
+from plare.parser.rule import ARule
+from plare.parser.rule import Rule
 
 class Row:
   

@@ -1,7 +1,7 @@
 import re
 
-from pypar.lexer.exception import UnknownToken
-from pypar.lexer.token import Token
+from plare.lexer.exception import UnknownToken
+from plare.lexer.token import Token
 
 EOF = Token('EOF')
 EPSILON = Token('EPSILON')

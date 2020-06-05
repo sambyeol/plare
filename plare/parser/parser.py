@@ -1,19 +1,19 @@
 from itertools import cycle
 
-from pypar.lexer.token import Token
-from pypar.lexer.lexer import EOF
-from pypar.lexer.lexer import EPSILON
-from pypar.parser.automata import Edge
-from pypar.parser.automata import EdgeSet
-from pypar.parser.automata import State
-from pypar.parser.automata import StateSet
-from pypar.parser.exception import ReduceReduceConflict
-from pypar.parser.exception import ShiftReduceConflict
-from pypar.parser.rule import ARule
-from pypar.parser.rule import ARuleSet
-from pypar.parser.rule import Constructor
-from pypar.parser.rule import Rule
-from pypar.parser.table import Table
+from plare.lexer.token import Token
+from plare.lexer.lexer import EOF
+from plare.lexer.lexer import EPSILON
+from plare.parser.automata import Edge
+from plare.parser.automata import EdgeSet
+from plare.parser.automata import State
+from plare.parser.automata import StateSet
+from plare.parser.exception import ReduceReduceConflict
+from plare.parser.exception import ShiftReduceConflict
+from plare.parser.rule import ARule
+from plare.parser.rule import ARuleSet
+from plare.parser.rule import Constructor
+from plare.parser.rule import Rule
+from plare.parser.table import Table
 
 class Parser:
   

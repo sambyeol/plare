@@ -1,4 +1,4 @@
-import pypar.lang.tree
+import plare.lang.tree
 
 class Type:
 
@@ -41,11 +41,11 @@ class Type:
     else:
       for k, ts in self.__dict.items():
         if ts is None:
-          self.__dict[k] = pypar.lang.tree.Constructor(k)
+          self.__dict[k] = plare.lang.tree.Constructor(k)
         else:
           ts = [(t[:-1], t[-1]) if type(t) == str and t[-1] in '?*' else (t, None) for t in ts]
           ts = [(types[t], o) if type(t) == str else (t, o) for t, o in ts]
-          self.__dict[k] = pypar.lang.tree.Constructor(k, ts)
+          self.__dict[k] = plare.lang.tree.Constructor(k, ts)
 
     self.__built = True
     return self
@@ -101,7 +101,7 @@ class Type:
       return True
 
     else:
-      if isinstance(elem, pypar.lang.tree.Tree):
+      if isinstance(elem, plare.lang.tree.Tree):
         return elem.data in self.__dict.keys()
 
       else:

@@ -1,4 +1,4 @@
-from pypar.parser.exception import DoublePointingEdge
+from plare.parser.exception import DoublePointingEdge
 
 class State:
 
