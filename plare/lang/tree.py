@@ -12,6 +12,10 @@ class Tree:
   def data(self):
     return self.__data
 
+  @property
+  def children(self):
+    return self.__children
+
   def __repr__(self):
     return 'Tree(data={}{})'.format(self.__data, ', children=[{}]'.format(', '.join([str(e) for e in self.__children])) if self.__children else '')
 
