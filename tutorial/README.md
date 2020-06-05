@@ -111,6 +111,7 @@ As in defining language above, recursive (or mutually recursive) rules will be p
 ```Parser``` class will generate a parser based on ```lexer``` and parsing rules defined previously.
 ```python
 from plare import Parser
+
 parser = Parser(lexer, [P, E, N], P, precedence={TOKENS.STAR: 1, TOKENS.SLASH: 1})
 ```
 The third argument of the ```Parser``` is identifying the starting variable, and ```precedence``` argument will let ```Parser``` know the precedence of the tokens. By default, all token have precedence of ```0```, and left associativity. If you want to make some of the tokens to have right associativity, just pass the list of tokens to a ```right_associativity``` argument.
