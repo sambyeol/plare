@@ -5,7 +5,7 @@ Language description language, Lexer, Parser purely developed with python3
 Download the codes from [GitHub](https://github.com/HenryLee97/plare) and install using ```pip```.
 ```bash
 $ cd /path/to/your/workspace
-$ git clone https://github.com/HenryLee/plare.git
+$ git clone https://github.com/HenryLee97/plare.git
 $ cd plare
 $ sudo pip install .
 ```
