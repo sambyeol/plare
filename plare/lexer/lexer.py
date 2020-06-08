@@ -54,7 +54,7 @@ class Lexer:
       comment = False
       for start, end in self.__comment_regex:
         if start.match(src):
-          src = src[end.find(src).end():]
+          src = src[end.match(src).end():]
           comment = True
           break
       if comment:
