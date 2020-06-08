@@ -79,7 +79,7 @@ The parsing rule of the calculator is as follows.
 The left-hand side of ```:``` is a variable and the right-hand side of ```->``` is a constructing rule for each matching case.
 ```
 P: E -> $1
-E: N -> E.Const($1)
+E: N -> exp.Const($1)
  | ( E ) -> $2
  | E + E -> exp.Add($1, $3)
  | E - E -> exp.Sub($1, $3)
