@@ -4,10 +4,18 @@ import re
 from typing import Any, Callable, Generator
 
 from plare.exception import LexingError
+from plare.utils import logger
 
 
 class Token:
     def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        logger.debug(
+            "Token created: %s(%s) @ (%s, %s)",
+            self.__class__.__name__,
+            value,
+            lineno,
+            offset,
+        )
         self.lineno = lineno
         self.offset = offset
 
@@ -59,6 +67,12 @@ class Lexer:
                 if match is None:
                     continue
                 matched = match.group(0)
+                logger.debug(
+                    "Pattern, matched: %s (from %s), %s",
+                    regex,
+                    entry,
+                    matched,
+                )
                 src = src[len(matched) :]
                 match pattern:
                     case str():
