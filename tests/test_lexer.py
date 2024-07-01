@@ -1,6 +1,9 @@
 from typing import Any
 
-from plare.lexer import LexingState, Token
+import pytest
+
+from plare.exception import LexingError
+from plare.lexer import EOF, Lexer, LexingState, Token
 
 
 class PLUS(Token):
@@ -11,7 +14,7 @@ class NUM(Token):
     value: int
 
     def __init__(self, value: str, *, lineno: int, offset: int) -> None:
-        super().__init__(lineno=lineno, offset=offset)
+        super().__init__(value, lineno=lineno, offset=offset)
         self.value = int(value)
 
     def __hash__(self) -> int:
@@ -29,7 +32,7 @@ class ID(Token):
     value: str
 
     def __init__(self, value: str, *, lineno: int, offset: int) -> None:
-        super().__init__(lineno=lineno, offset=offset)
+        super().__init__(value, lineno=lineno, offset=offset)
         self.value = value
 
     def __hash__(self) -> int:
@@ -50,36 +53,36 @@ def test_token_attributes():
     assert token.offset == 0
 
 
-def PLUSPattern(
-    matched: str,
-    state: LexingState,
-    entries: list[str],
-    lineno: int,
-    offset: int,
-) -> PLUS:
-    return PLUS(lineno=lineno, offset=offset)
+def make_positive_integer_lexer():
+    return Lexer(
+        {
+            "start": [
+                (r"\+", PLUS),
+                (r"", "digit"),
+            ],
+            "digit": [
+                (r"\d+", NUM),
+            ],
+        },
+        LexingState(),
+    )
 
 
-def NUMPattern(
-    matched: str,
-    state: LexingState,
-    entries: list[str],
-    lineno: int,
-    offset: int,
-) -> NUM:
-    return NUM(matched, lineno=lineno, offset=offset)
+def test_lex_positive_integer():
+    lexer = make_positive_integer_lexer()
+    tokens = list(lexer.lex("+123", "start"))
+    assert len(tokens) == 3
+    assert isinstance(tokens[0], PLUS)
+    assert tokens[0].lineno == 1
+    assert tokens[0].offset == 0
+    assert isinstance(tokens[1], NUM)
+    assert tokens[1].value == 123
+    assert tokens[1].lineno == 1
+    assert tokens[1].offset == 1
+    assert isinstance(tokens[2], EOF)
 
 
-def test_pattern_creates_token_python_variable():
-    token = PLUSPattern("+", LexingState(), [], 1, 0)
-    assert isinstance(token, PLUS)
-    assert token.lineno == 1
-    assert token.offset == 0
-
-
-def test_pattern_creates_token_integer():
-    token = NUMPattern("123", LexingState(), [], 1, 0)
-    assert isinstance(token, NUM)
-    assert token.value == 123
-    assert token.lineno == 1
-    assert token.offset == 0
+def test_lex_positive_integer_fail_on_tailing_plus():
+    lexer = make_positive_integer_lexer()
+    with pytest.raises(LexingError):
+        list(lexer.lex("+123+", "start"))
