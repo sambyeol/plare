@@ -1,15 +1,18 @@
-
 class DoublePointingEdge(Exception):
-  pass
+    pass
+
 
 class WrongAction(Exception):
-  pass
+    pass
+
 
 class ParsingTableError(Exception):
-  pass
+    pass
+
 
 class ShiftReduceConflict(Exception):
-  pass
+    pass
+
 
 class ReduceReduceConflict(Exception):
-  pass
+    pass
