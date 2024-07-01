@@ -20,7 +20,7 @@ class NUM(Token):
     def __hash__(self) -> int:
         return hash(self.value) + super().__hash__()
 
-    def __eq__(self, other: Any):
+    def __eq__(self, other: Any) -> bool:
         return (
             isinstance(other, self.__class__)
             and self.value == other.value
@@ -38,7 +38,7 @@ class ID(Token):
     def __hash__(self) -> int:
         return hash(self.value) + super().__hash__()
 
-    def __eq__(self, other: Any):
+    def __eq__(self, other: Any) -> bool:
         return (
             isinstance(other, self.__class__)
             and self.value == other.value
