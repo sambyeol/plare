@@ -1,3 +1,2 @@
-
 class UnknownToken(Exception):
-  pass
+    pass

@@ -1,9 +1,5 @@
-__version__ = '1.0'
+__version__ = "1.0.0"
 
-from plare.lang import build_lang
-from plare.lang import Type
-from plare.lexer import Lexer
-from plare.lexer import Token
-from plare.parser import build_grammar
-from plare.parser import Parser
-from plare.parser import Rule
+from plare.lang import Type, build_lang
+from plare.lexer import Lexer, Token
+from plare.parser import Parser, Rule, build_grammar

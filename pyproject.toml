@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plare"
+authors = [
+    { name="Seokhyun Lee", email="gbvrcx@gmail.com" }
+]
+description = "Language description language, Lexer, and Parser for Python3"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dynamic = ["version"]
+dependencies = [
+    "rich>=13"
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=23",
+    "isort>=5"
+]
+test = [
+    "pytest>=7"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/henrylee97/plare"
+"Bug Tracker" = "https://github.com/henrylee97/plare/issues"
+
+[tool.hatch.version]
+path = "plare/__init__.py"
+
+[tool.isort]
+profile = "black"
+known_first_party = ["mir"]
