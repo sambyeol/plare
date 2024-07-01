@@ -56,27 +56,28 @@ class Lexer:
 
             for regex, pattern in patterns:
                 match = regex.match(src)
-                if match is not None:
-                    matched = match.group(0)
-                    src = src[len(matched) :]
-                    match pattern:
-                        case str():
-                            entry = pattern
-                        case type():
-                            yield pattern(matched, lineno=lineno, offset=offset)
-                        case _:
-                            token = pattern(matched, self.state, lineno, offset)
-                            match token:
-                                case Token():
-                                    yield token
-                                case _:
-                                    entry = token
-                    newlines = matched.count("\n")
-                    lineno += newlines
-                    if newlines > 0:
-                        offset = 0
-                    offset = len(matched) - matched.rfind("\n")
-                    break
+                if match is None:
+                    continue
+                matched = match.group(0)
+                src = src[len(matched) :]
+                match pattern:
+                    case str():
+                        entry = pattern
+                    case type():
+                        yield pattern(matched, lineno=lineno, offset=offset)
+                    case _:
+                        token = pattern(matched, self.state, lineno, offset)
+                        match token:
+                            case Token():
+                                yield token
+                            case _:
+                                entry = token
+                newlines = matched.count("\n")
+                lineno += newlines
+                if newlines > 0:
+                    offset = 0
+                offset = len(matched) - matched.rfind("\n")
+                break
             else:
                 raise LexingError(f"Unexpected character: {src[0]}", lineno, offset)
         yield EOF(src, lineno=lineno, offset=offset)
