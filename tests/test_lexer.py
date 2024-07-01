@@ -1,38 +1,85 @@
-import pytest
+from typing import Any
 
-from plare.exception import InvalidPattern
-from plare.lexer import Pattern, Token
+from plare.lexer import LexingState, Token
+
+
+class PLUS(Token):
+    pass
+
+
+class NUM(Token):
+    value: int
+
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(lineno=lineno, offset=offset)
+        self.value = int(value)
+
+    def __hash__(self) -> int:
+        return hash(self.value) + super().__hash__()
+
+    def __eq__(self, other: Any):
+        return (
+            isinstance(other, self.__class__)
+            and self.value == other.value
+            and super().__eq__(other)
+        )
+
+
+class ID(Token):
+    value: str
+
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(lineno=lineno, offset=offset)
+        self.value = value
+
+    def __hash__(self) -> int:
+        return hash(self.value) + super().__hash__()
+
+    def __eq__(self, other: Any):
+        return (
+            isinstance(other, self.__class__)
+            and self.value == other.value
+            and super().__eq__(other)
+        )
 
 
 def test_token_attributes():
-    token = Token("x", "ID", lineno=1, offset=0)
+    token = ID("x", lineno=1, offset=0)
     assert token.value == "x"
-    assert token.id == "ID"
     assert token.lineno == 1
     assert token.offset == 0
 
 
+def PLUSPattern(
+    matched: str,
+    state: LexingState,
+    entries: list[str],
+    lineno: int,
+    offset: int,
+) -> PLUS:
+    return PLUS(lineno=lineno, offset=offset)
+
+
+def NUMPattern(
+    matched: str,
+    state: LexingState,
+    entries: list[str],
+    lineno: int,
+    offset: int,
+) -> NUM:
+    return NUM(matched, lineno=lineno, offset=offset)
+
+
 def test_pattern_creates_token_python_variable():
-    ID = Pattern(r"[a-zA-Z_][a-zA-Z0-9_]*", "ID")
-    assert ID.id == "ID"
-    token = ID("x", lineno=1, offset=0)
-    assert token.value == "x"
-    assert token.id == "ID"
+    token = PLUSPattern("+", LexingState(), [], 1, 0)
+    assert isinstance(token, PLUS)
     assert token.lineno == 1
     assert token.offset == 0
 
 
 def test_pattern_creates_token_integer():
-    INT = Pattern(r"[0-9]+", "INT")
-    assert INT.id == "INT"
-    token = INT("42", lineno=1, offset=0)
-    assert token.value == "42"
-    assert token.id == "INT"
+    token = NUMPattern("123", LexingState(), [], 1, 0)
+    assert isinstance(token, NUM)
+    assert token.value == 123
     assert token.lineno == 1
     assert token.offset == 0
-
-
-def test_pattern_failed_when_pattern_does_not_match():
-    INT = Pattern(r"[0-9]+", "INT")
-    with pytest.raises(InvalidPattern):
-        INT("x", lineno=1, offset=0)
