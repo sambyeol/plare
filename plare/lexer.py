@@ -38,13 +38,17 @@ class EPSILON(Token):
     pass
 
 
-type Pattern[T] = (Callable[[str, T, int, int], Token | str] | type[Token] | str)
-
-
 class Lexer[T]:
     def __init__(
         self,
-        patterns: dict[str, list[tuple[str, Pattern[T]]]],
+        patterns: dict[
+            str,
+            list[
+                tuple[
+                    str, Callable[[str, T, int, int], Token | str] | type[Token] | str
+                ]
+            ],
+        ],
         state_factory: Callable[[], T],
     ) -> None:
         self.patterns = {
