@@ -47,13 +47,15 @@ type Pattern = Callable[[str, LexingState, int, int], Token | str] | type[Token]
 
 class Lexer:
     def __init__(
-        self, patterns: dict[str, list[tuple[str, Pattern]]], state: LexingState
+        self,
+        patterns: dict[str, list[tuple[str, Pattern]]],
+        state: LexingState | None = None,
     ) -> None:
         self.patterns = {
             token: [(re.compile(r), pattern) for r, pattern in patterns[token]]
             for token in patterns
         }
-        self.state = state
+        self.state = state or LexingState()
 
     def lex(self, src: str, entry: str) -> Generator[Token]:
         lineno = 1

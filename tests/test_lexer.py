@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from plare.exception import LexingError
-from plare.lexer import EOF, Lexer, LexingState, Token
+from plare.lexer import EOF, Lexer, Token
 
 
 class PLUS(Token):
@@ -64,7 +64,6 @@ def make_positive_integer_lexer():
                 (r"\d+", NUM),
             ],
         },
-        LexingState(),
     )
 
 
