@@ -38,26 +38,23 @@ class EPSILON(Token):
     pass
 
 
-class LexingState:
-    pass
+type Pattern[T] = (Callable[[str, T, int, int], Token | str] | type[Token] | str)
 
 
-type Pattern = Callable[[str, LexingState, int, int], Token | str] | type[Token] | str
-
-
-class Lexer:
+class Lexer[T]:
     def __init__(
         self,
-        patterns: dict[str, list[tuple[str, Pattern]]],
-        state: LexingState | None = None,
+        patterns: dict[str, list[tuple[str, Pattern[T]]]],
+        state_factory: Callable[[], T],
     ) -> None:
         self.patterns = {
             token: [(re.compile(r), pattern) for r, pattern in patterns[token]]
             for token in patterns
         }
-        self.state = state or LexingState()
+        self.state_factory = state_factory
 
     def lex(self, src: str, entry: str) -> Generator[Token]:
+        state = self.state_factory()
         lineno = 1
         offset = 0
 
@@ -82,7 +79,7 @@ class Lexer:
                     case type():
                         yield pattern(matched, lineno=lineno, offset=offset)
                     case _:
-                        token = pattern(matched, self.state, lineno, offset)
+                        token = pattern(matched, state, lineno, offset)
                         match token:
                             case Token():
                                 yield token

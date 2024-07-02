@@ -1,3 +1,4 @@
+from types import NoneType
 from typing import Any
 
 import pytest
@@ -64,6 +65,7 @@ def make_positive_integer_lexer():
                 (r"\d+", NUM),
             ],
         },
+        NoneType,
     )
 
 
