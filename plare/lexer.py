@@ -55,7 +55,7 @@ class Lexer:
         }
         self.state = state
 
-    def lex(self, src: str, entry: str) -> Generator[Token, None, None]:
+    def lex(self, src: str, entry: str) -> Generator[Token]:
         lineno = 1
         offset = 0
 
