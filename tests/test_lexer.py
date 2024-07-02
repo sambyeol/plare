@@ -4,7 +4,8 @@ from typing import Any
 import pytest
 
 from plare.exception import LexingError
-from plare.lexer import EOF, Lexer, Token
+from plare.lexer import Lexer
+from plare.parser import EOF, Token
 
 
 class PLUS(Token):

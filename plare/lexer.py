@@ -1,41 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Generator
+from typing import Callable, Generator
 
 from plare.exception import LexingError
+from plare.parser import EOF, Token
 from plare.utils import logger
-
-
-class Token:
-    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
-        logger.debug(
-            "Token created: %s(%s) @ (%s, %s)",
-            self.__class__.__name__,
-            value,
-            lineno,
-            offset,
-        )
-        self.lineno = lineno
-        self.offset = offset
-
-    def __hash__(self) -> int:
-        return hash(self.lineno) + hash(self.offset)
-
-    def __eq__(self, other: Any) -> bool:
-        return (
-            isinstance(other, self.__class__)
-            and self.lineno == other.lineno
-            and self.offset == other.offset
-        )
-
-
-class EOF(Token):
-    pass
-
-
-class EPSILON(Token):
-    pass
 
 
 class Lexer[T]:
