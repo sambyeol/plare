@@ -1,2 +1,0 @@
-class UnknownToken(Exception):
-    pass
