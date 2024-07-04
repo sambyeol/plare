@@ -503,7 +503,7 @@ class Parser[T]:
             if token is None:
                 token = next(lexbuf, None)
             if token is None:
-                raise ParsingError("Unexpected EOF")
+                raise ParsingError("Unexpected end of token stream")
             if key is None:
                 key = type(token)
 
