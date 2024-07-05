@@ -15,7 +15,9 @@ class ShiftReduceConflict(ParserError):
 
 
 class ReduceReduceConflict(ParserError):
-    pass
+    def __init__(self, left: str, precedence: int) -> None:
+        self.left = left
+        self.precedence = precedence
 
 
 class ParsingError(PlareException):
