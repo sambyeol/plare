@@ -94,6 +94,7 @@ class Item[T]:
     right: list[Symbol]
     loc: int
     maker: Maker[T]
+    precedence: int
 
     def __init__(
         self,
@@ -106,6 +107,17 @@ class Item[T]:
         self.right = right
         self.loc = loc
         self.maker = maker
+        self.precedence = 0
+        terminals = [t for t in right if isinstance(t, type)]
+        for token in terminals:
+            if token.precedence > 0:
+                self.precedence = token.precedence
+                break
+        else:
+            for token in terminals:
+                if token.precedence < 0:
+                    self.precedence = token.precedence
+                    break
 
     @property
     def next(self) -> Symbol | None:
@@ -186,11 +198,13 @@ class Reduce[T]:
     left: str
     n: int
     maker: Maker[T]
+    precedence: int
 
-    def __init__(self, left: str, n: int, maker: Maker[T]) -> None:
+    def __init__(self, left: str, n: int, maker: Maker[T], precedence: int) -> None:
         self.left = left
         self.n = n
         self.maker = maker
+        self.precedence = precedence
 
     def __str__(self) -> str:
         return f"Reduce({self.n}, {self.maker})"
@@ -245,7 +259,7 @@ class Table[T]:
                     case Shift(), Reduce():
                         raise ShiftReduceConflict()
                     case Reduce(), Reduce():
-                        raise ReduceReduceConflict()
+                        raise ReduceReduceConflict(exist.left, exist.precedence)
                     case _:
                         raise ParserError(
                             f"Unknown parser error in state {state}: action for {symbol} is already determined to {exist}, but new action {action} is given"
@@ -271,6 +285,9 @@ class Table[T]:
     def __getitem__(self, key: tuple[int, Symbol]) -> Action[T] | None:
         state, symbol = key
         return self.table[state][symbol]
+
+    def force_update(self, state: int, symbol: Symbol, action: Action[T]) -> None:
+        self.table[state][symbol] = action
 
 
 class Rule[T]:
@@ -486,9 +503,28 @@ class Parser[T]:
                         self.table[state.id, EOF] = Accept(item.left)
                     else:
                         for symbol in rules[item.left].follow:
-                            self.table[state.id, symbol] = Reduce(
-                                item.left, len(item.right), item.maker
+                            reduce_action = Reduce(
+                                item.left, len(item.right), item.maker, item.precedence
                             )
+                            try:
+                                self.table[state.id, symbol] = reduce_action
+                            except ShiftReduceConflict:
+                                if item.precedence > symbol.precedence or (
+                                    item.precedence == symbol.precedence
+                                    and symbol.associative == "left"
+                                ):
+                                    self.table.force_update(
+                                        state.id, symbol, reduce_action
+                                    )
+                            except ReduceReduceConflict as e:
+                                if item.precedence > e.precedence:
+                                    self.table.force_update(
+                                        state.id, symbol, reduce_action
+                                    )
+                                elif item.precedence == e.precedence:
+                                    raise ParserError(
+                                        f"Reduce-Reduce conflict in state {state.id}: {e.left} vs {item.left}"
+                                    )
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token | None:
         lexbuf = iter(lexbuf)
