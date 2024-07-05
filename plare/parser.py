@@ -88,6 +88,9 @@ class StartVariable(str):
     def __eq__(self, other: Any) -> bool:
         return isinstance(other, StartVariable) and super().__eq__(other)
 
+    def __ne__(self, other: Any) -> bool:
+        return not isinstance(other, StartVariable) or super().__ne__(other)
+
 
 class Item[T]:
     left: str | StartVariable
@@ -375,14 +378,16 @@ class Rule[T]:
                             else:
                                 next_first = rules[next_token].first
                                 self.follow.update(next_first - set([EPSILON]))
-                                if EPSILON in next_first:
+                                if EPSILON in next_first and next_token != self.left:
                                     self.follow.update(
                                         rules[next_token].calc_follow(rules)
                                     )
                         else:
-                            self.follow.update(rule.calc_follow(rules))
+                            if rule.left != self.left:
+                                self.follow.update(rule.calc_follow(rules))
 
         self.follow_built = True
+        logger.debug("Follow(%s) = %s", self.left, self.follow)
         return self.follow
 
     def __hash__(self) -> int:
@@ -500,7 +505,7 @@ class Parser[T]:
             for item in state.items:
                 if item.next is None:
                     if item.left in start_variables:
-                        self.table[state.id, EOF] = Accept(item.left)
+                        self.table[state.id, EOF] = Accept(item.left.orig)
                     else:
                         for symbol in rules[item.left].follow:
                             reduce_action = Reduce(
