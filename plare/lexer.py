@@ -20,7 +20,7 @@ class Lexer[T]:
                 ]
             ],
         ],
-        state_factory: Callable[[], T],
+        state_factory: Callable[[], T] = lambda: None,
     ) -> None:
         self.patterns = {
             token: [(re.compile(r), pattern) for r, pattern in patterns[token]]
