@@ -27,13 +27,13 @@ class Lexer[T]:
         }
         self.state_factory = state_factory
 
-    def lex(self, src: str, entry: str) -> Generator[Token]:
+    def lex(self, var: str, src: str) -> Generator[Token]:
         state = self.state_factory()
         lineno = 1
         offset = 0
 
         while len(src) > 0:
-            patterns = self.patterns[entry]
+            patterns = self.patterns[var]
 
             for regex, pattern in patterns:
                 match = regex.match(src)
@@ -43,13 +43,13 @@ class Lexer[T]:
                 logger.debug(
                     "Pattern, matched: %s (from %s), %s",
                     regex,
-                    entry,
+                    var,
                     matched,
                 )
                 src = src[len(matched) :]
                 match pattern:
                     case str():
-                        entry = pattern
+                        var = pattern
                     case type():
                         yield pattern(matched, lineno=lineno, offset=offset)
                     case _:
@@ -58,7 +58,7 @@ class Lexer[T]:
                             case Token():
                                 yield token
                             case _:
-                                entry = token
+                                var = token
                 newlines = matched.count("\n")
                 lineno += newlines
                 if newlines > 0:
