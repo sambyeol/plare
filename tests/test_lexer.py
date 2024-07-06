@@ -72,7 +72,7 @@ def make_positive_integer_lexer():
 
 def test_lex_positive_integer():
     lexer = make_positive_integer_lexer()
-    tokens = list(lexer.lex("+123", "start"))
+    tokens = list(lexer.lex("start", "+123"))
     assert len(tokens) == 3
     assert isinstance(tokens[0], PLUS)
     assert tokens[0].lineno == 1
@@ -87,4 +87,4 @@ def test_lex_positive_integer():
 def test_lex_positive_integer_fail_on_tailing_plus():
     lexer = make_positive_integer_lexer()
     with pytest.raises(LexingError):
-        list(lexer.lex("+123+", "start"))
+        list(lexer.lex("start", "+123+"))
