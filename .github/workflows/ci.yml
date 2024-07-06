@@ -1,6 +1,9 @@
-name: CI Test on PR
+name: CI
 
 on:
+  push:
+    branches:
+      - master
   pull_request:
     branches:
       - master
@@ -38,7 +41,7 @@ jobs:
           pytest . --junitxml=junit/test-results.xml
 
       - name: Post test results
-        if: ${{ always() }}
+        if: ${{ always() && event_name == 'pull_request' }}
         uses: sambyeol/publish-pytest-action@v2
         with:
           junit-xml: junit/test-results.xml
