@@ -514,6 +514,12 @@ class Parser[T]:
                             try:
                                 self.table[state.id, symbol] = reduce_action
                             except ShiftReduceConflict:
+                                logger.warning(
+                                    "Shift-Reduce conflict in state %d: %s vs %s",
+                                    state.id,
+                                    symbol,
+                                    item.left,
+                                )
                                 if item.precedence > symbol.precedence or (
                                     item.precedence == symbol.precedence
                                     and symbol.associative == "left"
@@ -522,6 +528,12 @@ class Parser[T]:
                                         state.id, symbol, reduce_action
                                     )
                             except ReduceReduceConflict as e:
+                                logger.warning(
+                                    "Reduce-Reduce conflict in state %d: %s vs %s",
+                                    state.id,
+                                    e.left,
+                                    item.left,
+                                )
                                 if item.precedence > e.precedence:
                                     self.table.force_update(
                                         state.id, symbol, reduce_action
@@ -530,6 +542,7 @@ class Parser[T]:
                                     raise ParserError(
                                         f"Reduce-Reduce conflict in state {state.id}: {e.left} vs {item.left}"
                                     )
+        logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token | None:
         lexbuf = iter(lexbuf)

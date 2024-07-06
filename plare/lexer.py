@@ -26,6 +26,7 @@ class Lexer[T]:
             for token in patterns
         }
         self.state_factory = state_factory
+        logger.info("Lexer created")
 
     def lex(self, var: str, src: str) -> Generator[Token]:
         state = self.state_factory()
