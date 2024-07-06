@@ -496,7 +496,7 @@ class Parser[T]:
                             try:
                                 self.table[state.id, symbol] = reduce_action
                             except ShiftReduceConflict:
-                                logger.warning(
+                                logger.info(
                                     "Shift-Reduce conflict in state %d: %s vs %s",
                                     state.id,
                                     symbol,
@@ -510,7 +510,7 @@ class Parser[T]:
                                         state.id, symbol, reduce_action
                                     )
                             except ReduceReduceConflict as e:
-                                logger.warning(
+                                logger.info(
                                     "Reduce-Reduce conflict in state %d: %s vs %s",
                                     state.id,
                                     e.left,
