@@ -35,5 +35,10 @@ test = [
 [tool.hatch.version]
 path = "plare/__init__.py"
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "/plare/"
+]
+
 [tool.isort]
 profile = "black"
