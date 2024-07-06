@@ -526,7 +526,7 @@ class Parser[T]:
                                     ) from None
         logger.info("Parser created")
 
-    def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token | None:
+    def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:
         lexbuf = iter(lexbuf)
 
         state = self.entry_state[var]
