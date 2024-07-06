@@ -1,8 +1,69 @@
+from __future__ import annotations
+
 from argparse import ArgumentParser
 from pathlib import Path
 
-from plare.lexer import Lexer, Token
+from plare.lexer import Lexer
 from plare.parser import Parser
+from plare.token import Token
+
+
+class Exp:
+    pass
+
+
+class Const(Exp):
+    __match_args__ = ("value",)
+
+    def __init__(self, n: NUM) -> None:
+        self.value = n.value
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+class Add(Exp):
+    __match_args__ = ("left", "right")
+
+    def __init__(self, left: Exp, right: Exp) -> None:
+        self.left = left
+        self.right = right
+
+    def __str__(self) -> str:
+        return f"({self.left} + {self.right})"
+
+
+class Sub(Exp):
+    __match_args__ = ("left", "right")
+
+    def __init__(self, left: Exp, right: Exp) -> None:
+        self.left = left
+        self.right = right
+
+    def __str__(self) -> str:
+        return f"({self.left} - {self.right})"
+
+
+class Mul(Exp):
+    __match_args__ = ("left", "right")
+
+    def __init__(self, left: Exp, right: Exp) -> None:
+        self.left = left
+        self.right = right
+
+    def __str__(self) -> str:
+        return f"({self.left} * {self.right})"
+
+
+class Div(Exp):
+    __match_args__ = ("left", "right")
+
+    def __init__(self, left: Exp, right: Exp) -> None:
+        self.left = left
+        self.right = right
+
+    def __str__(self) -> str:
+        return f"({self.left} / {self.right})"
 
 
 class NUM(Token):
@@ -35,65 +96,7 @@ class RPAREN(Token):
     pass
 
 
-class Tree:
-    pass
-
-
-class Const(Tree):
-    __match_args__ = ("value",)
-
-    def __init__(self, n: NUM, /) -> None:
-        self.value = n.value
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-
-class Add(Tree):
-    __match_args__ = ("left", "right")
-
-    def __init__(self, left: Tree, right: Tree, /) -> None:
-        self.left = left
-        self.right = right
-
-    def __str__(self) -> str:
-        return f"({self.left} + {self.right})"
-
-
-class Sub(Tree):
-    __match_args__ = ("left", "right")
-
-    def __init__(self, left: Tree, right: Tree, /) -> None:
-        self.left = left
-        self.right = right
-
-    def __str__(self) -> str:
-        return f"({self.left} - {self.right})"
-
-
-class Mul(Tree):
-    __match_args__ = ("left", "right")
-
-    def __init__(self, left: Tree, right: Tree, /) -> None:
-        self.left = left
-        self.right = right
-
-    def __str__(self) -> str:
-        return f"({self.left} * {self.right})"
-
-
-class Div(Tree):
-    __match_args__ = ("left", "right")
-
-    def __init__(self, left: Tree, right: Tree, /) -> None:
-        self.left = left
-        self.right = right
-
-    def __str__(self) -> str:
-        return f"({self.left} / {self.right})"
-
-
-def calc(exp: Tree) -> int:
+def calc(exp: Exp) -> int:
     match exp:
         case Const(value):
             return value
@@ -133,18 +136,17 @@ def main():
                 (r".", "comment"),
             ],
         },
-        lambda: None,
     )
 
-    parser = Parser[Tree](
+    parser = Parser(
         {
             "exp": [
+                ([NUM], Const, [0]),
                 (["exp", PLUS, "exp"], Add, [0, 2]),
                 (["exp", MINUS, "exp"], Sub, [0, 2]),
                 (["exp", STAR, "exp"], Mul, [0, 2]),
                 (["exp", SLASH, "exp"], Div, [0, 2]),
                 ([LPAREN, "exp", RPAREN], None, [1]),
-                ([NUM], Const, [0]),
             ]
         }
     )
@@ -152,6 +154,8 @@ def main():
     print(f"== Source ({args.src}) ==")
     src = Path(args.src).read_text()
     src = parser.parse("exp", lexer.lex("start", src))
+    if isinstance(src, Token):  # Just for type checking
+        raise Exception("Something went wrong")
     print(src)
     print(f"== Result ({args.src}) ==")
     print(calc(src))
