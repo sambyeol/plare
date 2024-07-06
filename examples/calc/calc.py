@@ -118,8 +118,8 @@ def main():
     lexer = Lexer(
         {
             "start": [
-                (r"[ \t\n]+", "start"),
                 (r"//", "comment"),
+                (r"[ \t\n]+", "start"),
                 (r"-?(0|[1-9][0-9]*)", NUM),
                 (r"\+", PLUS),
                 (r"-", MINUS),
@@ -129,8 +129,8 @@ def main():
                 (r"\)", RPAREN),
             ],
             "comment": [
-                (r".*", "comment"),
                 (r"//", "start"),
+                (r".", "comment"),
             ],
         },
         lambda: None,
