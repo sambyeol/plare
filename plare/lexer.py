@@ -4,7 +4,8 @@ import re
 from typing import Callable, Generator
 
 from plare.exception import LexingError
-from plare.parser import EOF, Token
+from plare.parser import EOF
+from plare.token import Token
 from plare.utils import logger
 
 
