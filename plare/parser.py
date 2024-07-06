@@ -2,12 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Literal, Protocol
 
-from plare.exception import (
-    ParserError,
-    ParsingError,
-    ReduceReduceConflict,
-    ShiftReduceConflict,
-)
+from plare.exception import ParserError, ParsingError
 from plare.utils import logger
 
 type assoc = Literal["left", "right"]
@@ -238,6 +233,20 @@ class Goto:
 
 
 type Action[T] = Shift | Reduce[T] | Accept | Goto
+
+
+class Conflict(Exception):
+    pass
+
+
+class ShiftReduceConflict(Conflict):
+    pass
+
+
+class ReduceReduceConflict(Conflict):
+    def __init__(self, left: str, precedence: int) -> None:
+        self.left = left
+        self.precedence = precedence
 
 
 class Table[T]:
@@ -541,7 +550,7 @@ class Parser[T]:
                                 elif item.precedence == e.precedence:
                                     raise ParserError(
                                         f"Reduce-Reduce conflict in state {state.id}: {e.left} vs {item.left}"
-                                    )
+                                    ) from None
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token | None:
