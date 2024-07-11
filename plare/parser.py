@@ -301,6 +301,9 @@ class Rule[T]:
         recursive_rights = list[list[Symbol]]()
         self.first = set()
         for right, _ in self.rights:
+            if len(right) == 0:
+                self.first.add(EPSILON)
+                continue
             for i, token in enumerate(right):
                 if isinstance(token, type):
                     if token == EPSILON:
