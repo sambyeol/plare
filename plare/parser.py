@@ -301,6 +301,9 @@ class Rule[T]:
         recursive_rights = list[list[Symbol]]()
         self.first = set()
         for right, _ in self.rights:
+            if len(right) == 0:
+                self.first.add(EPSILON)
+                continue
             for i, token in enumerate(right):
                 if isinstance(token, type):
                     if token == EPSILON:
@@ -557,15 +560,19 @@ class Parser[T]:
                     token = None
 
                 case Reduce(left, n, maker):
-                    # Pop stack
-                    stack = stack[:-n]
+                    if n > 0:
+                        # Pop stack
+                        stack = stack[:-n]
 
-                    # Pop symbols
-                    poped_symbols = symbols[-n:]
-                    symbols = symbols[:-n]
+                        # Pop symbols
+                        poped_symbols = symbols[-n:]
+                        symbols = symbols[:-n]
 
-                    # Make new symbol
-                    symbols.append(maker(*poped_symbols))
+                        # Make new symbol
+                        symbols.append(maker(*poped_symbols))
+
+                    else:
+                        symbols.append(maker())
 
                     # Prepare next
                     state = stack[-1]
