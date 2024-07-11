@@ -63,6 +63,13 @@ def test_parse_positive_integer_without_add():
     assert tree.value == 1
 
 
+def test_minimal_empty_rule_parser():
+    parser = Parser({"pgm": [([], list[int], [])]})
+    parsed = parser.parse("pgm", [EOF("", lineno=1, offset=0)])
+    assert isinstance(parsed, list)
+    assert len(parsed) == 0
+
+
 class LBRACKET(Token):
     pass
 
