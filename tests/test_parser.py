@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from typing import Any
 
-from plare.lexer import Token
 from plare.parser import EOF, Parser
+from plare.token import Token
 
 
 class PLUS(Token):
@@ -35,8 +37,8 @@ class Num(Tree):
         self.value = value.value
 
 
-def make_positive_integer_parser():
-    return Parser(
+def make_positive_integer_parser() -> Parser[Tree]:
+    return Parser[Tree](
         {
             "pgm": [
                 (["exp"], None, [0]),
@@ -59,3 +61,55 @@ def test_parse_positive_integer_without_add():
     )
     assert isinstance(tree, Num)
     assert tree.value == 1
+
+
+class LBRACKET(Token):
+    pass
+
+
+class RBRACKET(Token):
+    pass
+
+
+class COMMA(Token):
+    pass
+
+
+class IntList:
+    items: list[int]
+
+    def __init__(self, item: int, tail: IntList) -> None:
+        self.items = [item, *tail.items]
+
+
+class EmptyIntList(IntList):
+    def __init__(self) -> None:
+        self.items = []
+
+
+def make_list_parser() -> Parser[IntList]:
+    return Parser[IntList](
+        {
+            "list": [
+                ([LBRACKET, "items", RBRACKET], None, [1]),
+            ],
+            "items": [
+                ([NUM, COMMA, "items"], IntList, [0, 1]),
+                ([], EmptyIntList, []),
+            ],
+        }
+    )
+
+
+def test_parse_empty_intlist():
+    parser = make_list_parser()
+    tree = parser.parse(
+        "list",
+        [
+            LBRACKET("[", lineno=1, offset=0),
+            RBRACKET("]", lineno=1, offset=1),
+            EOF("", lineno=1, offset=2),
+        ],
+    )
+    assert isinstance(tree, IntList)
+    assert len(tree.items) == 0
