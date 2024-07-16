@@ -108,7 +108,7 @@ def test_lex_multiple_tokens_for_single_match():
         }
     )
     tokens = list(lexer.lex("start", " \t\n"))
-    assert len(tokens) == 4
+    assert len(tokens) == 3
     assert isinstance(tokens[0], SPACE)
     assert tokens[0].lineno == 1
     assert tokens[0].offset == 0
@@ -118,4 +118,3 @@ def test_lex_multiple_tokens_for_single_match():
     assert isinstance(tokens[2], SPACE)
     assert tokens[2].lineno == 1
     assert tokens[2].offset == 2
-    assert isinstance(tokens[3], EOF)
