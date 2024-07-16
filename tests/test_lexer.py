@@ -118,3 +118,27 @@ def test_lex_multiple_tokens_for_single_match():
     assert isinstance(tokens[2], SPACE)
     assert tokens[2].lineno == 1
     assert tokens[2].offset == 2
+
+
+class EOF(Token):
+    pass
+
+
+def test_lex_end_of_file():
+    lexer = Lexer(
+        {
+            "start": [
+                (r"\d+", NUM),
+                (r"$", EOF),
+            ]
+        }
+    )
+    tokens = list(lexer.lex("start", "123"))
+    assert len(tokens) == 2
+    assert isinstance(tokens[0], NUM)
+    assert tokens[0].value == 123
+    assert tokens[0].lineno == 1
+    assert tokens[0].offset == 0
+    assert isinstance(tokens[1], EOF)
+    assert tokens[1].lineno == 1
+    assert tokens[1].offset == 3
