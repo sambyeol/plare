@@ -87,3 +87,35 @@ def test_lex_positive_integer_fail_on_tailing_plus():
     lexer = make_positive_integer_lexer()
     with pytest.raises(LexingError):
         list(lexer.lex("start", "+123+"))
+
+
+class SPACE(Token):
+    pass
+
+
+def test_lex_multiple_tokens_for_single_match():
+    lexer = Lexer(
+        {
+            "start": [
+                (
+                    r"[ \t\n]+",
+                    lambda matched, state, lineno, offset: [
+                        SPACE(c, lineno=lineno, offset=offset + i)
+                        for i, c in enumerate(matched)
+                    ],
+                ),
+            ]
+        }
+    )
+    tokens = list(lexer.lex("start", " \t\n"))
+    assert len(tokens) == 4
+    assert isinstance(tokens[0], SPACE)
+    assert tokens[0].lineno == 1
+    assert tokens[0].offset == 0
+    assert isinstance(tokens[1], SPACE)
+    assert tokens[1].lineno == 1
+    assert tokens[1].offset == 1
+    assert isinstance(tokens[2], SPACE)
+    assert tokens[2].lineno == 1
+    assert tokens[2].offset == 2
+    assert isinstance(tokens[3], EOF)

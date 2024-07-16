@@ -15,7 +15,10 @@ class Lexer[T]:
             str,
             list[
                 tuple[
-                    str, Callable[[str, T, int, int], Token | str] | type[Token] | str
+                    str,
+                    Callable[[str, T, int, int], Token | str | list[Token]]
+                    | type[Token]
+                    | str,
                 ]
             ],
         ],
@@ -62,6 +65,8 @@ class Lexer[T]:
                         match token:
                             case Token():
                                 yield token
+                            case list():
+                                yield from token
                             case _:
                                 var = token
                 newlines = matched.count("\n")
