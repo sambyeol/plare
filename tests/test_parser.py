@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from plare.parser import EOF, Parser
+from plare.parser import Parser
 from plare.token import Token
 
 
@@ -56,16 +56,14 @@ def make_positive_integer_parser() -> Parser[Tree]:
 
 def test_parse_positive_integer_without_add():
     parser = make_positive_integer_parser()
-    tree = parser.parse(
-        "pgm", [NUM("1", lineno=1, offset=0), EOF("", lineno=1, offset=1)]
-    )
+    tree = parser.parse("pgm", [NUM("1", lineno=1, offset=0)])
     assert isinstance(tree, Num)
     assert tree.value == 1
 
 
 def test_minimal_empty_rule_parser():
     parser = Parser({"pgm": [([], list[int], [])]})
-    parsed = parser.parse("pgm", [EOF("", lineno=1, offset=0)])
+    parsed = parser.parse("pgm", [])
     assert isinstance(parsed, list)
     assert len(parsed) == 0
 
@@ -115,7 +113,6 @@ def test_parse_empty_intlist():
         [
             LBRACKET("[", lineno=1, offset=0),
             RBRACKET("]", lineno=1, offset=1),
-            EOF("", lineno=1, offset=2),
         ],
     )
     assert isinstance(tree, IntList)

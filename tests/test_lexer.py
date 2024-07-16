@@ -5,7 +5,7 @@ import pytest
 
 from plare.exception import LexingError
 from plare.lexer import Lexer
-from plare.parser import EOF, Token
+from plare.token import Token
 
 
 class PLUS(Token):
@@ -73,7 +73,7 @@ def make_positive_integer_lexer():
 def test_lex_positive_integer():
     lexer = make_positive_integer_lexer()
     tokens = list(lexer.lex("start", "+123"))
-    assert len(tokens) == 3
+    assert len(tokens) == 2
     assert isinstance(tokens[0], PLUS)
     assert tokens[0].lineno == 1
     assert tokens[0].offset == 0
@@ -81,7 +81,6 @@ def test_lex_positive_integer():
     assert tokens[1].value == 123
     assert tokens[1].lineno == 1
     assert tokens[1].offset == 1
-    assert isinstance(tokens[2], EOF)
 
 
 def test_lex_positive_integer_fail_on_tailing_plus():
@@ -109,7 +108,7 @@ def test_lex_multiple_tokens_for_single_match():
         }
     )
     tokens = list(lexer.lex("start", " \t\n"))
-    assert len(tokens) == 4
+    assert len(tokens) == 3
     assert isinstance(tokens[0], SPACE)
     assert tokens[0].lineno == 1
     assert tokens[0].offset == 0
@@ -119,4 +118,3 @@ def test_lex_multiple_tokens_for_single_match():
     assert isinstance(tokens[2], SPACE)
     assert tokens[2].lineno == 1
     assert tokens[2].offset == 2
-    assert isinstance(tokens[3], EOF)
