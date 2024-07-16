@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import chain
 from typing import Any, Iterable, Protocol
 
 from plare.exception import ParserError, ParsingError
@@ -530,9 +531,7 @@ class Parser[T]:
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:
-        eos = EOS("", lineno=0, offset=0)
-
-        lexbuf = iter(lexbuf)
+        lexbuf = chain(iter(lexbuf), [EOS("", lineno=0, offset=0)])
 
         state = self.entry_state[var]
         stack = [state]
@@ -542,7 +541,9 @@ class Parser[T]:
         token: Token | None = None
         while True:
             if token is None:
-                token = next(lexbuf, eos)
+                token = next(lexbuf, None)
+            if token is None:
+                raise ParsingError("Unexpected end of input")
             if key is None:
                 key = type(token)
 
