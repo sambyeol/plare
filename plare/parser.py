@@ -7,7 +7,7 @@ from plare.token import Token
 from plare.utils import logger
 
 
-class EOF(Token):
+class EOS(Token):
     pass
 
 
@@ -347,7 +347,7 @@ class Rule[T]:
 
         self.follow = set()
         if isinstance(self.left, StartVariable):
-            self.follow.add(EOF)
+            self.follow.add(EOS)
 
         else:
             for rule in rules.values():
@@ -490,7 +490,7 @@ class Parser[T]:
             for item in state.items:
                 if item.next is None:
                     if item.left in start_variables:
-                        self.table[state.id, EOF] = Accept(item.left.orig)
+                        self.table[state.id, EOS] = Accept(item.left.orig)
                     else:
                         for symbol in rules[item.left].follow:
                             reduce_action = Reduce(
@@ -530,6 +530,8 @@ class Parser[T]:
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:
+        eos = EOS("", lineno=0, offset=0)
+
         lexbuf = iter(lexbuf)
 
         state = self.entry_state[var]
@@ -540,16 +542,14 @@ class Parser[T]:
         token: Token | None = None
         while True:
             if token is None:
-                token = next(lexbuf, None)
-            if token is None:
-                raise ParsingError("Unexpected end of token stream")
+                token = next(lexbuf, eos)
             if key is None:
                 key = type(token)
 
             try:
                 action = self.table[state, key]
             except KeyError:
-                raise ParsingError(f"Unexpected symbol: {key}")
+                raise ParsingError(f"Unexpected symbol: {key}") from None
             logger.debug("State: %d, Symbol: %s, Action: %s", state, key, action)
             key = None
             match action:

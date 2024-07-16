@@ -4,7 +4,6 @@ import re
 from typing import Callable, Generator
 
 from plare.exception import LexingError
-from plare.parser import EOF
 from plare.token import Token
 from plare.utils import logger
 
@@ -33,8 +32,12 @@ class Lexer[T]:
         state = self.state_factory()
         lineno = 1
         offset = 0
+        ended = False
 
-        while len(src) > 0:
+        while not ended:
+            if len(src) == 0:
+                ended = True
+
             patterns = self.patterns[var]
 
             for regex, pattern in patterns:
@@ -68,5 +71,6 @@ class Lexer[T]:
                 offset = len(matched) - matched.rfind("\n")
                 break
             else:
+                if len(src) == 0:
+                    continue
                 raise LexingError(f"Unexpected character: {src[0]}", lineno, offset)
-        yield EOF(src, lineno=lineno, offset=offset)
