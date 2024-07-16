@@ -69,11 +69,13 @@ class Lexer[T]:
                                 yield from token
                             case _:
                                 var = token
-                newlines = matched.count("\n")
-                lineno += newlines
-                if newlines > 0:
+                matched_lines = matched.split("\n")
+                n_matched_new_lines = len(matched_lines) - 1
+                lineno += n_matched_new_lines
+                if n_matched_new_lines > 0:
                     offset = 0
-                offset = len(matched) - matched.rfind("\n")
+                last_matched_line = matched_lines[-1]
+                offset += len(last_matched_line)
                 break
             else:
                 if len(src) == 0:
