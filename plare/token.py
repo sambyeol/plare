@@ -13,7 +13,7 @@ class Token:
         logger.debug(
             "Token created: %s(%s) @ (%s, %s)",
             self.__class__.__name__,
-            value,
+            repr(value),
             lineno,
             offset,
         )

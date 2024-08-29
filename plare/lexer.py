@@ -49,10 +49,7 @@ class Lexer[T]:
                     continue
                 matched = match.group(0)
                 logger.debug(
-                    "Pattern, matched: %s (from %s), %s",
-                    regex,
-                    var,
-                    matched,
+                    "Pattern matched: %s (from %s), %s", regex, var, repr(matched)
                 )
                 src = src[len(matched) :]
                 match pattern:
