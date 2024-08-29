@@ -56,7 +56,7 @@ jobs:
           fetch-depth: 0
 
       - name: Lint Codebase
-        uses: super-linter/super-linter/slim@v6
+        uses: super-linter/super-linter/slim@v7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VALIDATE_ALL_CODEBASE: true
