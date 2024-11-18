@@ -31,6 +31,9 @@ dev = [
 test = [
     "pytest>=7"
 ]
+type = [
+    "pyright>=1.1"
+]
 
 [project.urls]
 "Homepage" = "https://github.com/sambyeol/plare"
