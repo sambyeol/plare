@@ -44,7 +44,7 @@ jobs:
 
       - name: Post test results
         if: ${{ always() && github.event_name == 'pull_request' }}
-        uses: sambyeol/publish-pytest-action@v2
+        uses: sambyeol/publish-pytest-action@v3
         with:
           junit-xml: junit/test-results.xml
 
