@@ -405,15 +405,11 @@ def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[I
     return items
 
 
-def goto[
-    T
-](
+def goto[T](
     items: set[Item[T]],
     symbol: Symbol,
     all_items: dict[str, set[Item[T]]],
-) -> set[
-    Item[T]
-]:
+) -> set[Item[T]]:
     return closure(
         set(next for item in items if (next := item.move(symbol)) is not None),
         all_items,
