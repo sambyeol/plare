@@ -487,7 +487,11 @@ class Parser[T]:
             for item in state.items:
                 if item.next is None:
                     if item.left in start_variables:
-                        self.table[state.id, EOS] = Accept(item.left.orig)
+                        self.table[state.id, EOS] = Accept(
+                            item.left.orig
+                            if isinstance(item.left, StartVariable)
+                            else item.left
+                        )
                     else:
                         for symbol in rules[item.left].follow:
                             reduce_action = Reduce(
