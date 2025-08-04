@@ -405,15 +405,11 @@ def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[I
     return items
 
 
-def goto[
-    T
-](
+def goto[T](
     items: set[Item[T]],
     symbol: Symbol,
     all_items: dict[str, set[Item[T]]],
-) -> set[
-    Item[T]
-]:
+) -> set[Item[T]]:
     return closure(
         set(next for item in items if (next := item.move(symbol)) is not None),
         all_items,
@@ -491,7 +487,11 @@ class Parser[T]:
             for item in state.items:
                 if item.next is None:
                     if item.left in start_variables:
-                        self.table[state.id, EOS] = Accept(item.left.orig)
+                        self.table[state.id, EOS] = Accept(
+                            item.left.orig
+                            if isinstance(item.left, StartVariable)
+                            else item.left
+                        )
                     else:
                         for symbol in rules[item.left].follow:
                             reduce_action = Reduce(
