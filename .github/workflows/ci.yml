@@ -47,6 +47,8 @@ jobs:
         uses: sambyeol/publish-pytest-action@v4
         with:
           junit-xml: junit/test-results.xml
+          comment-mode: hide
+          comment-identifier: py${{ matrix.python-version }}
 
   lint:
     name: Lint Codebase
