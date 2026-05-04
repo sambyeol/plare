@@ -112,7 +112,7 @@ class Lexer[T]:
                 logger.debug(
                     "Pattern matched: %s (from %s), %s", regex, var, repr(matched)
                 )
-                src = src[len(matched):]
+                src = src[len(matched) :]
                 match pattern:
                     case str():
                         var = pattern
