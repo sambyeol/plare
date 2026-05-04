@@ -1,3 +1,22 @@
+"""SLR(1) parser with operator-precedence conflict resolution.
+
+This module implements an **SLR(1)** (Simple LR, 1 token of lookahead) parser.
+The key characteristic of SLR(1) is that reduce actions fire on the full
+FOLLOW set of the reduced non-terminal, rather than on the tighter per-item
+lookahead sets used by LALR(1) or canonical LR(1).  This is an
+over-approximation that can cause spurious conflicts for grammars that LALR(1)
+would accept without conflict.  The LALR(1) upgrade is tracked in T6.
+
+Construction pipeline (``Parser.__init__``):
+    1. Augment the grammar with ``StartVariable(X) → X`` entry rules.
+    2. Compute FIRST sets for every non-terminal.
+    3. Compute FOLLOW sets for every non-terminal (requires FIRST sets).
+    4. Build the LR(0) canonical collection (states + transitions) via
+       ``closure`` / ``goto`` BFS.
+    5. Populate the action/goto table; resolve shift/reduce and reduce/reduce
+       conflicts using token precedence and associativity.
+"""
+
 from __future__ import annotations
 
 from itertools import chain
@@ -9,21 +28,30 @@ from plare.utils import logger
 
 
 class EOS(Token):
-    pass
+    """Sentinel token appended to every token stream to signal end-of-input."""
 
 
 class EPSILON(Token):
-    pass
+    """Sentinel token representing the empty string (ε) in FIRST sets."""
 
 
 type Symbol = type[Token] | str
 
 
 class Maker[T](Protocol):
+    """Protocol for semantic action callables used during reduction."""
+
     def __call__(self, *xs: T | Token) -> T | Token: ...
 
 
 class TMaker[T](Maker[T]):
+    """Action maker that constructs a typed AST node from selected children.
+
+    Args:
+        type: The AST node class to instantiate.
+        args: Indices into the RHS children to forward as positional arguments.
+    """
+
     def __init__(self, type: type[T], args: list[int]) -> None:
         self.type = type
         self.args = args
@@ -37,6 +65,12 @@ class TMaker[T](Maker[T]):
 
 
 class IDMaker[T](Maker[T]):
+    """Action maker that passes a single child through unchanged.
+
+    Args:
+        arg: Index of the child to return.
+    """
+
     def __init__(self, arg: int) -> None:
         self.arg = arg
 
@@ -48,6 +82,18 @@ class IDMaker[T](Maker[T]):
 
 
 class StartVariable(str):
+    """Augmented-grammar start symbol wrapper.
+
+    Wraps a non-terminal string so that the augmented production
+    ``StartVariable(X) → X`` is distinct from any user-defined rule
+    named ``X``.  Equality is strict: a ``StartVariable`` only compares
+    equal to another ``StartVariable`` with the same underlying string,
+    never to a plain ``str``.
+
+    Attributes:
+        orig: The original non-terminal name before wrapping.
+    """
+
     def __init__(self, variable: str) -> None:
         self.orig = variable
 
@@ -62,6 +108,29 @@ class StartVariable(str):
 
 
 class Item[T]:
+    """An LR(0) item ``[A → α • β]``.
+
+    An item records a grammar rule together with the *dot position* (``loc``)
+    indicating how much of the RHS has been recognised so far.  Items are the
+    building blocks of LR automaton states.
+
+    The ``precedence`` attribute is computed at construction time as the
+    precedence of the *first* terminal in ``right`` with a non-zero precedence
+    value (positive terminals take priority over negative ones).  This is used
+    for shift/reduce conflict resolution.  NOTE: per the T5 spec this will be
+    changed to the *last* terminal — the current behaviour matches yacc/bison
+    only for simple grammars.
+
+    Attributes:
+        left: The non-terminal on the LHS of the rule.
+        right: The full RHS symbol sequence (terminals are ``type[Token]``
+            subclasses; non-terminals are ``str``).
+        loc: Dot position (0 = dot before first symbol).
+        maker: The semantic action to invoke on reduction.
+        precedence: Effective precedence of this production for conflict
+            resolution; ``0`` means no precedence.
+    """
+
     left: str | StartVariable
     right: list[Symbol]
     loc: int
@@ -93,9 +162,11 @@ class Item[T]:
 
     @property
     def next(self) -> Symbol | None:
+        """The symbol immediately after the dot, or ``None`` if the item is complete."""
         return self.right[self.loc] if self.loc < len(self.right) else None
 
     def move(self, symbol: Symbol) -> Item[T] | None:
+        """Return a new item with the dot advanced past ``symbol``, or ``None`` if it doesn't match."""
         next = self.next
         if type(symbol) == type(next) and symbol == next:
             return Item(
@@ -135,6 +206,13 @@ class Item[T]:
 
 
 class State[T]:
+    """An LR(0) automaton state: a set of LR(0) items with a unique integer id.
+
+    Attributes:
+        id: Index used to look up rows in the ``Table``.
+        items: The closed set of LR(0) items that define this state.
+    """
+
     id: int
     items: set[Item[T]]
 
@@ -153,6 +231,8 @@ class State[T]:
 
 
 class Shift:
+    """LR table action: shift the lookahead token and push state ``next``."""
+
     __match_args__ = ("next",)
 
     next: int
@@ -165,6 +245,8 @@ class Shift:
 
 
 class Reduce[T]:
+    """LR table action: pop ``n`` symbols, apply ``maker``, push non-terminal ``left``."""
+
     __match_args__ = ("left", "n", "maker")
 
     left: str
@@ -183,6 +265,8 @@ class Reduce[T]:
 
 
 class Accept:
+    """LR table action: the parse of non-terminal ``symbol`` is complete."""
+
     __match_args__ = ("symbol",)
 
     symbol: str
@@ -195,6 +279,8 @@ class Accept:
 
 
 class Goto:
+    """LR table action: after a reduction, push state ``next`` for a non-terminal."""
+
     __match_args__ = ("next",)
 
     next: int
@@ -210,20 +296,38 @@ type Action[T] = Shift | Reduce[T] | Accept | Goto
 
 
 class Conflict(Exception):
-    pass
+    """Internal signal raised inside ``Table.__setitem__`` on an LR conflict."""
 
 
 class ShiftReduceConflict(Conflict):
-    pass
+    """Signals a shift/reduce conflict; caught and resolved by precedence rules."""
 
 
 class ReduceReduceConflict(Conflict):
+    """Signals a reduce/reduce conflict; carries the existing reduce's metadata.
+
+    Args:
+        left: LHS of the already-registered reduce action.
+        precedence: Precedence of the already-registered reduce action.
+    """
+
     def __init__(self, left: str, precedence: int) -> None:
         self.left = left
         self.precedence = precedence
 
 
 class Table[T]:
+    """LR action/goto table indexed by ``(state_id, symbol)``.
+
+    ``symbol`` is a ``type[Token]`` subclass for action entries (shift, reduce,
+    accept) and a plain ``str`` for goto entries.  Inserting a duplicate entry
+    raises ``ShiftReduceConflict`` or ``ReduceReduceConflict`` so the caller
+    can attempt resolution before committing.
+
+    Attributes:
+        table: Row-per-state list of ``{symbol: action}`` dicts.
+    """
+
     table: list[dict[Symbol, Action[T] | None]]
 
     def __init__(self, states: int) -> None:
@@ -273,10 +377,28 @@ class Table[T]:
         return self.table[state][symbol]
 
     def force_update(self, state: int, symbol: Symbol, action: Action[T]) -> None:
+        """Overwrite a table entry without conflict checking.
+
+        Used exclusively by ``Parser.__init__`` after it has decided which
+        action wins a conflict.  Must not be called for any other purpose.
+        """
         self.table[state][symbol] = action
 
 
 class Rule[T]:
+    """All RHS alternatives for a single non-terminal, together with its FIRST/FOLLOW sets.
+
+    ``Rule`` is the unit of grammar specification.  One ``Rule`` object
+    aggregates every production ``A → rhs₁ | rhs₂ | …`` for a given
+    non-terminal ``A``.
+
+    Attributes:
+        left: The non-terminal name (LHS).
+        rights: List of ``(rhs_symbols, maker)`` pairs, one per alternative.
+        first: FIRST(A) — populated by ``calc_first``.
+        follow: FOLLOW(A) — populated by ``calc_follow``.
+    """
+
     left: str
     rights: list[tuple[list[Symbol], Maker[T]]]
     first: set[type[Token]]
@@ -296,6 +418,30 @@ class Rule[T]:
         self.follow_built = False
 
     def calc_first(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
+        """Compute FIRST(A) for this non-terminal using SLR(1) conventions.
+
+        SLR(1) FIRST-set computation (Aho-Sethi-Ullman §4.4):
+          FIRST(A) is the set of terminals that can begin any string derivable
+          from A, plus EPSILON if A can derive the empty string.
+
+        This implementation uses a re-entry guard (``first_built``) rather than
+        a proper worklist fixed-point.  It handles direct left-recursion
+        ``A → A α`` by deferring the recursive suffix ``α`` until after the
+        non-recursive alternatives have been processed.
+
+        Invariant relied upon: ``rules`` must be the complete grammar dict so
+        that FIRST sets for all referenced non-terminals can be looked up
+        recursively.  For mutually recursive rules the guard may cause
+        incomplete results — this is addressed in T2 with a proper fixed-point
+        algorithm.
+
+        Args:
+            rules: Complete mapping of non-terminal name → ``Rule`` for the
+                current grammar.
+
+        Returns:
+            The FIRST set for this non-terminal (also stored in ``self.first``).
+        """
         if self.first_built:
             return self.first
 
@@ -343,6 +489,28 @@ class Rule[T]:
         return self.first
 
     def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
+        """Compute FOLLOW(A) for this non-terminal using SLR(1) conventions.
+
+        SLR(1) FOLLOW-set computation (Aho-Sethi-Ullman §4.4):
+          FOLLOW(A) is the set of terminals that can appear immediately to the
+          right of A in some sentential form.  EOS (end-of-stream) is added for
+          each augmented start symbol.
+
+        Invariant relied upon: ``calc_first`` must have been called on *all*
+        rules before this method is invoked, because FOLLOW propagation through
+        nullable suffixes reads ``rule.first`` directly.
+
+        This implementation also uses a re-entry guard (``follow_built``).
+        Mutual recursion in FOLLOW dependencies (e.g. FOLLOW(A) ⊇ FOLLOW(B)
+        ⊇ FOLLOW(A)) can cause incomplete results with this approach — fixed in
+        T2.
+
+        Args:
+            rules: Complete grammar dict (same object passed to ``calc_first``).
+
+        Returns:
+            The FOLLOW set for this non-terminal (also stored in ``self.follow``).
+        """
         if self.follow_built:
             return self.follow
 
@@ -387,10 +555,29 @@ class Rule[T]:
 
     @property
     def items(self) -> set[Item[T]]:
+        """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
         return set(Item(self.left, right, maker) for right, maker in self.rights)
 
 
 def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[Item[T]]:
+    """Compute the LR(0) closure of an item set.
+
+    This is the standard LR(0) closure operation (Aho-Sethi-Ullman §4.6):
+    for every item ``[A → α • B β]`` in the set, add the initial items
+    ``[B → • γ]`` for every production of B.  Repeat until no new items
+    are added.
+
+    Invariant: ``all_items`` must contain the complete initial item set for
+    every non-terminal reachable from the grammar's start symbols.  Missing
+    non-terminals will silently produce an incomplete closure.
+
+    Args:
+        items: The kernel item set to close.
+        all_items: Mapping from non-terminal name → its initial items ``{[A → • rhs]}``.
+
+    Returns:
+        The closed item set (a new ``set`` that is a superset of ``items``).
+    """
     items = set(items)
     worklist = set(items)
     while len(worklist) > 0:
@@ -410,6 +597,23 @@ def goto[T](
     symbol: Symbol,
     all_items: dict[str, set[Item[T]]],
 ) -> set[Item[T]]:
+    """Compute the LR(0) goto set: the successor state on ``symbol``.
+
+    Advances the dot past ``symbol`` in every item that has ``symbol``
+    immediately after its dot, then takes the closure of the resulting kernel.
+    This defines the transition function of the LR(0) automaton and is used
+    during the canonical-collection BFS in ``Parser.__init__``.
+
+    Args:
+        items: The current state's closed item set.
+        symbol: The grammar symbol (terminal class or non-terminal string) to
+            transition on.
+        all_items: Forwarded to ``closure``.
+
+    Returns:
+        The closed item set for the successor state, or an empty set if no
+        item in ``items`` has ``symbol`` after its dot.
+    """
     return closure(
         set(next for item in items if (next := item.move(symbol)) is not None),
         all_items,
@@ -417,6 +621,34 @@ def goto[T](
 
 
 class Parser[T]:
+    """SLR(1) parser that builds a parse table from a grammar and drives LR parsing.
+
+    Construct a ``Parser`` once from a grammar dict; then call ``parse``
+    repeatedly for different inputs.
+
+    Grammar format::
+
+        {
+            "non_terminal": [
+                ([SYM1, SYM2, "other_nt"], ASTNodeClass, [0, 1]),
+                ...
+            ],
+            ...
+        }
+
+    Each rule tuple is ``(rhs, action_type, arg_indices)``:
+      * ``rhs``: list of ``type[Token]`` subclasses (terminals) and ``str``
+        (non-terminal names).
+      * ``action_type``: class to construct on reduction, or ``None`` to pass
+        through a single child unchanged.
+      * ``arg_indices``: which RHS children to forward to ``action_type.__init__``.
+
+    Attributes:
+        table: The completed LR action/goto table.
+        entry_state: Mapping from non-terminal name → initial state id for that
+            entry point (one entry point per top-level key in the grammar).
+    """
+
     table: Table[T]
     entry_state: dict[str, int]
 
@@ -427,6 +659,12 @@ class Parser[T]:
             list[tuple[list[type[Token] | str], type[T] | None, list[int]]],
         ],
     ) -> None:
+        # ── Phase 1: Augment grammar ─────────────────────────────────────────
+        # For each entry non-terminal X, add an augmented rule
+        #   StartVariable(X) → X
+        # so the parser has a distinguished start state per entry point.
+        # Using StartVariable ensures these rules are never confused with
+        # user-defined rules, even if a user names a rule identically.
         entry_rules = {
             StartVariable(left): Rule[T](StartVariable(left), [([left], None, [0])])
             for left in grammar.keys()
@@ -435,16 +673,34 @@ class Parser[T]:
 
         rules = {left: Rule[T](left, rights) for left, rights in grammar.items()}
         rules |= entry_rules
+
+        # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
+        # FIRST(A) is needed to propagate ε through nullable non-terminals
+        # when computing FOLLOW sets in Phase 3.
         for rule in rules.values():
             rule.calc_first(rules)
+
+        # ── Phase 3: Compute FOLLOW sets (SLR(1) lookaheads) ─────────────────
+        # In SLR(1), a reduce action for rule A → α fires on every token in
+        # FOLLOW(A).  This is the defining over-approximation of SLR(1):
+        # it uses the global follow set rather than per-item lookaheads.
+        # Spurious conflicts arise when FOLLOW(A) contains tokens that cannot
+        # actually follow A in the specific state.  LALR(1) (T6) eliminates
+        # this by computing per-item lookaheads.
         for rule in rules.values():
             rule.calc_follow(rules)
+
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()
         for rule in rules.values():
             for right, _ in rule.rights:
                 all_tokens.update(t for t in right if isinstance(t, type))
 
+        # ── Phase 4: Build LR(0) canonical collection ────────────────────────
+        # Start with one initial state per augmented entry rule, then expand
+        # via goto BFS until no new states are found.  ``states`` is a set so
+        # duplicate item sets (same items, different tentative id) collapse into
+        # the existing state automatically via State.__eq__.
         states = set[State[T]]()
         self.entry_state = {}
         for i, (left, rule) in enumerate(entry_rules.items()):
@@ -475,6 +731,8 @@ class Parser[T]:
                 if len(states) != len_prev_states or len(edges) != len_prev_edges:
                     worklist.update({next_state})
 
+        # ── Phase 5: Populate action/goto table ──────────────────────────────
+        # Shift and Goto actions come directly from the automaton edges.
         self.table = Table(len(states))
         for prev, symbol, next in edges:
             if isinstance(symbol, type):
@@ -483,6 +741,14 @@ class Parser[T]:
             else:
                 self.table[prev.id, symbol] = Goto(next.id)
 
+        # Reduce and Accept actions come from complete items (dot at end).
+        # SLR(1): a reduce for A → α fires on every token in FOLLOW(A).
+        # Conflicts are resolved by precedence and associativity:
+        #   Shift/Reduce: prefer shift unless the production has higher
+        #     precedence than the lookahead token, or equal precedence with
+        #     left associativity.
+        #   Reduce/Reduce: prefer the higher-precedence production; raise
+        #     ParserError when precedences are equal (ambiguous grammar).
         for state in states:
             for item in state.items:
                 if item.next is None:
@@ -531,6 +797,30 @@ class Parser[T]:
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:
+        """Parse ``lexbuf`` as the non-terminal ``var`` and return the root AST node.
+
+        Implements the standard LR parsing algorithm (Aho-Sethi-Ullman §4.6):
+        maintain a state stack and a symbol stack; on each step look up the
+        action for the current state and lookahead token class.
+
+        The ``key`` variable holds the current lookahead *class* (not instance).
+        After a ``Reduce`` the driver does *not* consume a new token; instead it
+        sets ``key = left`` (the reduced non-terminal) and re-enters the action
+        lookup, which will find a ``Goto`` action to push the new state.
+
+        Args:
+            var: The entry non-terminal to parse (must be a key in the grammar
+                passed to ``__init__``).
+            lexbuf: An iterable of ``Token`` instances produced by the lexer.
+                An ``EOS`` sentinel is appended automatically.
+
+        Returns:
+            The root value produced by the top-level semantic action.
+
+        Raises:
+            ParsingError: On unexpected token, missing action, or wrong
+                acceptance symbol.
+        """
         lexbuf = chain(iter(lexbuf), [EOS("", lineno=0, offset=0)])
 
         state = self.entry_state[var]
