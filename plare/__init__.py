@@ -1,4 +1,4 @@
-"""Plare — a pure-Python lexer/parser framework.
+"""Plare — a Python lexer/parser framework.
 
 Public API
 ----------
