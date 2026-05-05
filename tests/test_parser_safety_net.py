@@ -7,13 +7,13 @@ and two LALR(1)-only grammars (currently xfail).
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 from plare.exception import ParsingError
 from plare.parser import Parser
 from plare.token import Token
+
+type GrammarRules[T] = tuple[list[type[Token] | str], type[T] | None, list[int]]
 
 # ---------------------------------------------------------------------------
 # ε-productions
@@ -59,7 +59,7 @@ def test_epsilon_optional_suffix() -> None:
     Verifies that omitting the optional token produces NoLabel, and including it
     produces SomeLabel, without any parser construction error.
     """
-    grammar: dict[str, list[Any]] = {
+    grammar: dict[str, list[GrammarRules[Stmt | Label]]] = {
         "stmt": [([ID_T, SEMI_T, "opt_label"], Stmt, [0, 2])],
         "opt_label": [
             ([LABEL_T], SomeLabel, [0]),
@@ -128,7 +128,7 @@ def test_left_recursive_addition_chain() -> None:
     that repeated left recursion does not overflow the stack and that the spine
     leans left.
     """
-    grammar: dict[str, list[Any]] = {
+    grammar: dict[str, list[GrammarRules[Expr2 | Num2 | Add2]]] = {
         "expr": [
             (["expr", PLUS2, "num"], Add2, [0, 2]),
             (["num"], None, [0]),
@@ -194,7 +194,7 @@ def test_right_recursive_cons_list() -> None:
     Parsing 1 :: 2 :: 3 must yield Cons(Num(1), Cons(Num(2), Num(3))), confirming
     that repeated right recursion terminates and that the spine leans right.
     """
-    grammar: dict[str, list[Any]] = {
+    grammar: dict[str, list[GrammarRules[Expr3 | Num3 | Cons3]]] = {
         "list": [
             (["num", CONS3, "list"], Cons3, [0, 2]),
             (["num"], None, [0]),
@@ -477,7 +477,7 @@ def test_multiple_entry_points() -> None:
     each entry point accepts only its own token type and raises ParsingError
     when fed a token that belongs to the other entry point.
     """
-    grammar: dict[str, list[Any]] = {
+    grammar: dict[str, list[GrammarRules[StrVal | IntVal]]] = {
         "str_expr": [([WORD7], StrVal, [0])],
         "int_expr": [([NUM7], IntVal, [0])],
     }
