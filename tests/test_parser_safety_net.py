@@ -30,20 +30,24 @@ class LABEL_T(Token):
     pass
 
 
-class Stmt:
-    def __init__(self, name: ID_T, label: SomeLabel | NoLabel) -> None:
-        self.name = name
-        self.label = label
+class Label:
+    pass
 
 
-class SomeLabel:
+class SomeLabel(Label):
     def __init__(self, lbl: LABEL_T) -> None:
         self.lbl = lbl
 
 
-class NoLabel:
+class NoLabel(Label):
     def __init__(self) -> None:
         pass
+
+
+class Stmt:
+    def __init__(self, name: ID_T, label: Label) -> None:
+        self.name = name
+        self.label = label
 
 
 def test_epsilon_optional_suffix() -> None:
@@ -100,13 +104,17 @@ class PLUS2(Token):
     pass
 
 
-class Num2:
+class Expr2:
+    pass
+
+
+class Num2(Expr2):
     def __init__(self, n: NUM2) -> None:
         self.value = n.value
 
 
-class Add2:
-    def __init__(self, l: Add2 | Num2, r: Add2 | Num2) -> None:
+class Add2(Expr2):
+    def __init__(self, l: Expr2, r: Expr2) -> None:
         self.l = l
         self.r = r
 
@@ -161,13 +169,17 @@ class CONS3(Token):
     pass
 
 
-class Num3:
+class Expr3:
+    pass
+
+
+class Num3(Expr3):
     def __init__(self, n: NUM3) -> None:
         self.value = n.value
 
 
-class Cons3:
-    def __init__(self, head: Num3, tail: Cons3 | Num3) -> None:
+class Cons3(Expr3):
+    def __init__(self, head: Expr3, tail: Expr3) -> None:
         self.head = head
         self.tail = tail
 
@@ -230,19 +242,23 @@ class STAR4(Token):
     associative = "left"
 
 
-class Num4:
+class Expr4:
+    pass
+
+
+class Num4(Expr4):
     def __init__(self, n: NUM4) -> None:
         self.value = n.value
 
 
-class Add4:
-    def __init__(self, l: Add4 | Mul4 | Num4, r: Add4 | Mul4 | Num4) -> None:
+class Add4(Expr4):
+    def __init__(self, l: Expr4, r: Expr4) -> None:
         self.l = l
         self.r = r
 
 
-class Mul4:
-    def __init__(self, l: Add4 | Mul4 | Num4, r: Add4 | Mul4 | Num4) -> None:
+class Mul4(Expr4):
+    def __init__(self, l: Expr4, r: Expr4) -> None:
         self.l = l
         self.r = r
 
@@ -299,13 +315,17 @@ class MINUS5(Token):
     associative = "left"
 
 
-class Num5:
+class Expr5:
+    pass
+
+
+class Num5(Expr5):
     def __init__(self, n: NUM5) -> None:
         self.value = n.value
 
 
-class Sub5:
-    def __init__(self, l: Sub5 | Num5, r: Sub5 | Num5) -> None:
+class Sub5(Expr5):
+    def __init__(self, l: Expr5, r: Expr5) -> None:
         self.l = l
         self.r = r
 
@@ -360,13 +380,17 @@ class POW6(Token):
     associative = "right"
 
 
-class Num6:
+class Expr6:
+    pass
+
+
+class Num6(Expr6):
     def __init__(self, n: NUM6) -> None:
         self.value = n.value
 
 
-class Pow6:
-    def __init__(self, l: Pow6 | Num6, r: Pow6 | Num6) -> None:
+class Pow6(Expr6):
+    def __init__(self, l: Expr6, r: Expr6) -> None:
         self.l = l
         self.r = r
 
@@ -475,13 +499,17 @@ class PLUS8(Token):
     pass
 
 
-class Num8:
+class Expr8:
+    pass
+
+
+class Num8(Expr8):
     def __init__(self, n: NUM8) -> None:
         self.value = n.value
 
 
-class Add8:
-    def __init__(self, l: Add8 | Num8, r: Add8 | Num8) -> None:
+class Add8(Expr8):
+    def __init__(self, l: Expr8, r: Expr8) -> None:
         self.l = l
         self.r = r
 
