@@ -7,6 +7,8 @@ and two LALR(1)-only grammars (currently xfail).
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from plare.exception import ParsingError
@@ -57,15 +59,14 @@ def test_epsilon_optional_suffix() -> None:
     Verifies that omitting the optional token produces NoLabel, and including it
     produces SomeLabel, without any parser construction error.
     """
-    p = Parser(
-        {
-            "stmt": [([ID_T, SEMI_T, "opt_label"], Stmt, [0, 2])],
-            "opt_label": [
-                ([LABEL_T], SomeLabel, [0]),
-                ([], NoLabel, []),
-            ],
-        }
-    )
+    grammar: dict[str, list[Any]] = {
+        "stmt": [([ID_T, SEMI_T, "opt_label"], Stmt, [0, 2])],
+        "opt_label": [
+            ([LABEL_T], SomeLabel, [0]),
+            ([], NoLabel, []),
+        ],
+    }
+    p = Parser(grammar)
 
     result_no = p.parse(
         "stmt",
@@ -127,15 +128,14 @@ def test_left_recursive_addition_chain() -> None:
     that repeated left recursion does not overflow the stack and that the spine
     leans left.
     """
-    p = Parser(
-        {
-            "expr": [
-                (["expr", PLUS2, "num"], Add2, [0, 2]),
-                (["num"], None, [0]),
-            ],
-            "num": [([NUM2], Num2, [0])],
-        }
-    )
+    grammar: dict[str, list[Any]] = {
+        "expr": [
+            (["expr", PLUS2, "num"], Add2, [0, 2]),
+            (["num"], None, [0]),
+        ],
+        "num": [([NUM2], Num2, [0])],
+    }
+    p = Parser(grammar)
 
     result = p.parse(
         "expr",
@@ -149,8 +149,11 @@ def test_left_recursive_addition_chain() -> None:
     )
     assert isinstance(result, Add2)
     assert isinstance(result.l, Add2), "left recursion must produce a left-leaning tree"
+    assert isinstance(result.l.l, Num2)
     assert result.l.l.value == 1
+    assert isinstance(result.l.r, Num2)
     assert result.l.r.value == 2
+    assert isinstance(result.r, Num2)
     assert result.r.value == 3
 
 
@@ -191,15 +194,14 @@ def test_right_recursive_cons_list() -> None:
     Parsing 1 :: 2 :: 3 must yield Cons(Num(1), Cons(Num(2), Num(3))), confirming
     that repeated right recursion terminates and that the spine leans right.
     """
-    p = Parser(
-        {
-            "list": [
-                (["num", CONS3, "list"], Cons3, [0, 2]),
-                (["num"], None, [0]),
-            ],
-            "num": [([NUM3], Num3, [0])],
-        }
-    )
+    grammar: dict[str, list[Any]] = {
+        "list": [
+            (["num", CONS3, "list"], Cons3, [0, 2]),
+            (["num"], None, [0]),
+        ],
+        "num": [([NUM3], Num3, [0])],
+    }
+    p = Parser(grammar)
 
     result = p.parse(
         "list",
@@ -212,10 +214,12 @@ def test_right_recursive_cons_list() -> None:
         ],
     )
     assert isinstance(result, Cons3)
+    assert isinstance(result.head, Num3)
     assert result.head.value == 1
     assert isinstance(
         result.tail, Cons3
     ), "right recursion must produce a right-leaning tree"
+    assert isinstance(result.tail.head, Num3)
     assert result.tail.head.value == 2
     assert isinstance(result.tail.tail, Num3)
     assert result.tail.tail.value == 3
@@ -295,7 +299,9 @@ def test_operator_precedence_mul_over_add() -> None:
     assert isinstance(result.l, Num4)
     assert result.l.value == 1
     assert isinstance(result.r, Mul4)
+    assert isinstance(result.r.l, Num4)
     assert result.r.l.value == 2
+    assert isinstance(result.r.r, Num4)
     assert result.r.r.value == 3
 
 
@@ -359,8 +365,11 @@ def test_left_associative_subtraction() -> None:
     )
     assert isinstance(result, Sub5)
     assert isinstance(result.l, Sub5), "left-associative: left child must also be Sub5"
+    assert isinstance(result.l.l, Num5)
     assert result.l.l.value == 1
+    assert isinstance(result.l.r, Num5)
     assert result.l.r.value == 2
+    assert isinstance(result.r, Num5)
     assert result.r.value == 3
 
 
@@ -423,11 +432,14 @@ def test_right_associative_exponentiation() -> None:
         ],
     )
     assert isinstance(result, Pow6)
+    assert isinstance(result.l, Num6)
     assert result.l.value == 2
     assert isinstance(
         result.r, Pow6
     ), "right-associative: right child must also be Pow6"
+    assert isinstance(result.r.l, Num6)
     assert result.r.l.value == 3
+    assert isinstance(result.r.r, Num6)
     assert result.r.r.value == 4
 
 
@@ -465,12 +477,11 @@ def test_multiple_entry_points() -> None:
     each entry point accepts only its own token type and raises ParsingError
     when fed a token that belongs to the other entry point.
     """
-    p = Parser(
-        {
-            "str_expr": [([WORD7], StrVal, [0])],
-            "int_expr": [([NUM7], IntVal, [0])],
-        }
-    )
+    grammar: dict[str, list[Any]] = {
+        "str_expr": [([WORD7], StrVal, [0])],
+        "int_expr": [([NUM7], IntVal, [0])],
+    }
+    p = Parser(grammar)
 
     str_result = p.parse("str_expr", [WORD7("hello", lineno=1, offset=0)])
     assert isinstance(str_result, StrVal)
@@ -541,7 +552,9 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
         ],
     )
     assert isinstance(result, Add8)
+    assert isinstance(result.l, Num8)
     assert result.l.value == 1
+    assert isinstance(result.r, Num8)
     assert result.r.value == 2
 
 
