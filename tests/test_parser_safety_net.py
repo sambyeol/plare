@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from plare.exception import ParserError, ParsingError
+from plare.exception import ParsingError
 from plare.parser import Parser
 from plare.token import Token
 
