@@ -1,8 +1,8 @@
-"""T1 safety-net tests for the Plare SLR(1) parser.
+"""Parser tests for the Plare SLR(1) parser.
 
 Covers: ε-productions, left/right recursion, operator precedence,
 left/right associativity, multiple entry points, shift/reduce default,
-and two LALR(1)-only grammars (xfail until T6).
+and two LALR(1)-only grammars (currently xfail).
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from plare.parser import Parser
 from plare.token import Token
 
 # ---------------------------------------------------------------------------
-# AC #1 — ε-productions
+# ε-productions
 # ---------------------------------------------------------------------------
 
 
@@ -80,7 +80,7 @@ def test_epsilon_optional_suffix() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #2 — Left recursion
+# Left recursion
 # ---------------------------------------------------------------------------
 
 
@@ -134,7 +134,7 @@ def test_left_recursive_addition_chain() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #3 — Right recursion
+# Right recursion
 # ---------------------------------------------------------------------------
 
 
@@ -191,7 +191,7 @@ def test_right_recursive_cons_list() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #4 — Operator precedence
+# Operator precedence
 # ---------------------------------------------------------------------------
 
 
@@ -259,7 +259,7 @@ def test_operator_precedence_mul_over_add() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #5 — Left associativity
+# Left associativity
 # ---------------------------------------------------------------------------
 
 
@@ -314,7 +314,7 @@ def test_left_associative_subtraction() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #6 — Right associativity
+# Right associativity
 # ---------------------------------------------------------------------------
 
 
@@ -371,7 +371,7 @@ def test_right_associative_exponentiation() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #7 — Multiple entry points
+# Multiple entry points
 # ---------------------------------------------------------------------------
 
 
@@ -418,7 +418,7 @@ def test_multiple_entry_points() -> None:
 
 
 # ---------------------------------------------------------------------------
-# AC #8 — Shift/reduce default (prefer shift when no precedence)
+# Shift/reduce default (prefer shift when no precedence)
 # ---------------------------------------------------------------------------
 
 
@@ -467,11 +467,11 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
 
 
 # ---------------------------------------------------------------------------
-# xfail — LALR(1)-only grammars (Aho/Sethi/Ullman reduce/reduce conflicts)
+# LALR(1)-only grammars (Aho/Sethi/Ullman reduce/reduce conflicts)
 #
-# In these grammars two distinct non-terminals (A_nt / B_nt, X_nt / Y_nt)
-# share the same single-token body.  Their LR(0) reduce states are merged,
-# and FOLLOW(A_nt) == FOLLOW(B_nt), so SLR(1) cannot resolve the R/R conflict.
+# Two distinct non-terminals (A_nt / B_nt, X_nt / Y_nt) share the same
+# single-token body.  Their LR(0) reduce states are merged, and
+# FOLLOW(A_nt) == FOLLOW(B_nt), so SLR(1) cannot resolve the R/R conflict.
 # LALR(1) computes per-item lookaheads that differ, resolving the conflict.
 # ---------------------------------------------------------------------------
 
@@ -501,7 +501,7 @@ class Node8x:
         pass
 
 
-@pytest.mark.xfail(strict=True, reason="requires LALR(1) — see T6")
+@pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_only_aho_grammar_variant_1() -> None:
     # S → A_tok A_nt D_tok | B_tok B_nt D_tok | A_tok B_nt E_tok | B_tok A_nt E_tok
     # A_nt → C_tok
@@ -554,7 +554,7 @@ class Node8y:
         pass
 
 
-@pytest.mark.xfail(strict=True, reason="requires LALR(1) — see T6")
+@pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_only_aho_grammar_variant_2() -> None:
     # S2 → P X_nt S | Q Y_nt S | P Y_nt T | Q X_nt T
     # X_nt → R
