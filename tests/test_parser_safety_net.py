@@ -47,6 +47,12 @@ class NoLabel:
 
 
 def test_epsilon_optional_suffix() -> None:
+    """An optional suffix modelled as an ε-production reduces to the correct node.
+
+    Grammar: stmt → ID SEMI opt_label, opt_label → LABEL | ε.
+    Verifies that omitting the optional token produces NoLabel, and including it
+    produces SomeLabel, without any parser construction error.
+    """
     p = Parser(
         {
             "stmt": [([ID_T, SEMI_T, "opt_label"], Stmt, [0, 2])],
@@ -106,6 +112,13 @@ class Add2:
 
 
 def test_left_recursive_addition_chain() -> None:
+    """A left-recursive grammar builds a left-leaning parse tree.
+
+    Grammar: expr → expr PLUS num | num.
+    Parsing 1 + 2 + 3 must yield Add(Add(Num(1), Num(2)), Num(3)), confirming
+    that repeated left recursion does not overflow the stack and that the spine
+    leans left.
+    """
     p = Parser(
         {
             "expr": [
@@ -160,6 +173,12 @@ class Cons3:
 
 
 def test_right_recursive_cons_list() -> None:
+    """A right-recursive grammar builds a right-leaning parse tree.
+
+    Grammar: list → num CONS list | num.
+    Parsing 1 :: 2 :: 3 must yield Cons(Num(1), Cons(Num(2), Num(3))), confirming
+    that repeated right recursion terminates and that the spine leans right.
+    """
     p = Parser(
         {
             "list": [
@@ -229,6 +248,12 @@ class Mul4:
 
 
 def test_operator_precedence_mul_over_add() -> None:
+    """Higher-precedence operator binds tighter in an ambiguous grammar.
+
+    STAR4 (precedence=2) beats PLUS4 (precedence=1) in a shift/reduce conflict.
+    Parsing 1 + 2 * 3 must yield Add(Num(1), Mul(Num(2), Num(3))), with '+' at
+    the root and '*' deeper in the tree.
+    """
     p = Parser(
         {
             "expr": [
@@ -286,6 +311,12 @@ class Sub5:
 
 
 def test_left_associative_subtraction() -> None:
+    """Left-associative operator resolves shift/reduce conflict toward the left spine.
+
+    MINUS5 carries associative="left". Parsing 1 - 2 - 3 must yield
+    Sub(Sub(Num(1), Num(2)), Num(3)) — the parser must reduce before shifting
+    the second '-', not shift first.
+    """
     p = Parser(
         {
             "expr": [
@@ -341,6 +372,12 @@ class Pow6:
 
 
 def test_right_associative_exponentiation() -> None:
+    """Right-associative operator resolves shift/reduce conflict toward the right spine.
+
+    POW6 carries associative="right". Parsing 2 ^ 3 ^ 4 must yield
+    Pow(Num(2), Pow(Num(3), Num(4))) — the parser must shift before reducing,
+    grouping to the right.
+    """
     p = Parser(
         {
             "expr": [
@@ -398,6 +435,12 @@ class IntVal:
 
 
 def test_multiple_entry_points() -> None:
+    """A single Parser instance supports multiple independent start symbols.
+
+    Grammar has two top-level keys: "str_expr" and "int_expr". Verifies that
+    each entry point accepts only its own token type and raises ParsingError
+    when fed a token that belongs to the other entry point.
+    """
     p = Parser(
         {
             "str_expr": [([WORD7], StrVal, [0])],
@@ -444,6 +487,14 @@ class Add8:
 
 
 def test_shift_reduce_resolution_prefers_shift() -> None:
+    """Without explicit precedence, a shift/reduce conflict is silently resolved by shifting.
+
+    Grammar: expr → expr PLUS expr | NUM, with no precedence on PLUS.
+    The parser must construct without raising and parse a simple binary expression.
+    This test documents the default conflict-resolution behaviour as a regression
+    baseline — it does not assert tree shape for chains, since the choice between
+    left- and right-leaning is an implementation artifact when precedence is absent.
+    """
     p = Parser(
         {
             "expr": [
@@ -503,6 +554,15 @@ class Node8x:
 
 @pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_only_aho_grammar_variant_1() -> None:
+    """Aho/Sethi/Ullman grammar that exposes an SLR(1) reduce/reduce conflict.
+
+    A_nt and B_nt both reduce from a single C token, so they share one LR(0)
+    state. FOLLOW(A_nt) == FOLLOW(B_nt) == {D, E}, which makes SLR(1) unable
+    to choose between the two reduce actions. LALR(1) assigns distinct per-item
+    lookaheads ({D} vs {E} in each context) and resolves the conflict.
+
+    Currently xfail: Parser construction raises ParserError under SLR(1).
+    """
     # S → A_tok A_nt D_tok | B_tok B_nt D_tok | A_tok B_nt E_tok | B_tok A_nt E_tok
     # A_nt → C_tok
     # B_nt → C_tok
@@ -556,6 +616,15 @@ class Node8y:
 
 @pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_only_aho_grammar_variant_2() -> None:
+    """Isomorphic variant of the Aho/Sethi/Ullman grammar with different token names.
+
+    X_nt and Y_nt both reduce from a single R token. The conflict structure is
+    identical to variant 1: FOLLOW(X_nt) == FOLLOW(Y_nt) == {S, T} under SLR(1),
+    but LALR(1) per-item lookaheads differ. This second case confirms that the
+    xfail is not an artifact of a particular token ordering.
+
+    Currently xfail: Parser construction raises ParserError under SLR(1).
+    """
     # S2 → P X_nt S | Q Y_nt S | P Y_nt T | Q X_nt T
     # X_nt → R
     # Y_nt → R
