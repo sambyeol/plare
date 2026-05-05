@@ -31,7 +31,7 @@ class LABEL_T(Token):
 
 
 class Stmt:
-    def __init__(self, name: ID_T, label: object) -> None:
+    def __init__(self, name: ID_T, label: SomeLabel | NoLabel) -> None:
         self.name = name
         self.label = label
 
@@ -106,7 +106,7 @@ class Num2:
 
 
 class Add2:
-    def __init__(self, l: object, r: object) -> None:
+    def __init__(self, l: Add2 | Num2, r: Add2 | Num2) -> None:
         self.l = l
         self.r = r
 
@@ -167,7 +167,7 @@ class Num3:
 
 
 class Cons3:
-    def __init__(self, head: object, tail: object) -> None:
+    def __init__(self, head: Num3, tail: Cons3 | Num3) -> None:
         self.head = head
         self.tail = tail
 
@@ -236,13 +236,13 @@ class Num4:
 
 
 class Add4:
-    def __init__(self, l: object, r: object) -> None:
+    def __init__(self, l: Add4 | Mul4 | Num4, r: Add4 | Mul4 | Num4) -> None:
         self.l = l
         self.r = r
 
 
 class Mul4:
-    def __init__(self, l: object, r: object) -> None:
+    def __init__(self, l: Add4 | Mul4 | Num4, r: Add4 | Mul4 | Num4) -> None:
         self.l = l
         self.r = r
 
@@ -305,7 +305,7 @@ class Num5:
 
 
 class Sub5:
-    def __init__(self, l: object, r: object) -> None:
+    def __init__(self, l: Sub5 | Num5, r: Sub5 | Num5) -> None:
         self.l = l
         self.r = r
 
@@ -366,7 +366,7 @@ class Num6:
 
 
 class Pow6:
-    def __init__(self, l: object, r: object) -> None:
+    def __init__(self, l: Pow6 | Num6, r: Pow6 | Num6) -> None:
         self.l = l
         self.r = r
 
@@ -481,7 +481,7 @@ class Num8:
 
 
 class Add8:
-    def __init__(self, l: object, r: object) -> None:
+    def __init__(self, l: Add8 | Num8, r: Add8 | Num8) -> None:
         self.l = l
         self.r = r
 
@@ -548,7 +548,7 @@ class E8x(Token):
 
 
 class Node8x:
-    def __init__(self, *args: object) -> None:
+    def __init__(self, *args: Token) -> None:
         pass
 
 
@@ -610,7 +610,7 @@ class T8y(Token):
 
 
 class Node8y:
-    def __init__(self, *args: object) -> None:
+    def __init__(self, *args: Token) -> None:
         pass
 
 
