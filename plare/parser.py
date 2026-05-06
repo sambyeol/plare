@@ -418,130 +418,36 @@ class Rule[T]:
         self.follow_built = False
 
     def calc_first(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Compute FIRST(A) for this non-terminal using SLR(1) conventions.
-
-        SLR(1) FIRST-set computation (Aho-Sethi-Ullman §4.4):
-          FIRST(A) is the set of terminals that can begin any string derivable
-          from A, plus EPSILON if A can derive the empty string.
-
-        This implementation uses a re-entry guard (``first_built``) rather than
-        a proper worklist fixed-point.  It handles direct left-recursion
-        ``A → A α`` by deferring the recursive suffix ``α`` until after the
-        non-recursive alternatives have been processed.
-
-        Invariant relied upon: ``rules`` must be the complete grammar dict so
-        that FIRST sets for all referenced non-terminals can be looked up
-        recursively.  For mutually recursive rules the guard may cause
-        incomplete results — this is addressed in T2 with a proper fixed-point
-        algorithm.
+        """Return FIRST(A), computing it via ``compute_first_sets`` if needed.
 
         Args:
-            rules: Complete mapping of non-terminal name → ``Rule`` for the
-                current grammar.
+            rules: Complete grammar mapping non-terminal name → ``Rule``.
 
         Returns:
             The FIRST set for this non-terminal (also stored in ``self.first``).
         """
-        if self.first_built:
-            return self.first
-
-        recursive_rights = list[list[Symbol]]()
-        self.first = set()
-        for right, _ in self.rights:
-            if len(right) == 0:
-                self.first.add(EPSILON)
-                continue
-            for i, token in enumerate(right):
-                if isinstance(token, type):
-                    if token == EPSILON:
-                        continue
-                    self.first.add(token)
-                    break
-
-                else:
-                    if token == self.left:
-                        recursive_rights.append(right[i + 1 :])
-                        break
-                    token_first = rules[token].calc_first(rules)
-                    self.first.update(token_first)
-                    if EPSILON not in token_first:
-                        break
-
-        if EPSILON in self.first:
-            for right in recursive_rights:
-                for token in right:
-                    if isinstance(token, type):
-                        if token == EPSILON:
-                            continue
-                        self.first.add(token)
-                        break
-
-                    else:
-                        if token == self.left:
-                            continue
-                        token_first = rules[token].calc_first(rules)
-                        self.first.update(token_first)
-                        if EPSILON not in token_first:
-                            break
-
-        self.first_built = True
-        logger.debug("First(%s) = %s", self.left, self.first)
+        if not self.first_built:
+            fs = compute_first_sets(rules)
+            for n, r in rules.items():
+                r.first = fs[n]
+                r.first_built = True
         return self.first
 
     def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Compute FOLLOW(A) for this non-terminal using SLR(1) conventions.
-
-        SLR(1) FOLLOW-set computation (Aho-Sethi-Ullman §4.4):
-          FOLLOW(A) is the set of terminals that can appear immediately to the
-          right of A in some sentential form.  EOS (end-of-stream) is added for
-          each augmented start symbol.
-
-        Invariant relied upon: ``calc_first`` must have been called on *all*
-        rules before this method is invoked, because FOLLOW propagation through
-        nullable suffixes reads ``rule.first`` directly.
-
-        This implementation also uses a re-entry guard (``follow_built``).
-        Mutual recursion in FOLLOW dependencies (e.g. FOLLOW(A) ⊇ FOLLOW(B)
-        ⊇ FOLLOW(A)) can cause incomplete results with this approach — fixed in
-        T2.
+        """Return FOLLOW(A), computing it via ``compute_follow_sets`` if needed.
 
         Args:
-            rules: Complete grammar dict (same object passed to ``calc_first``).
+            rules: Complete grammar mapping non-terminal name → ``Rule``.
 
         Returns:
             The FOLLOW set for this non-terminal (also stored in ``self.follow``).
         """
-        if self.follow_built:
-            return self.follow
-
-        self.follow = set()
-        if isinstance(self.left, StartVariable):
-            self.follow.add(EOS)
-
-        else:
-            for rule in rules.values():
-                for right, _ in rule.rights:
-                    for i, token in enumerate(right):
-                        if not isinstance(token, str) or token != self.left:
-                            continue
-
-                        if i + 1 < len(right):
-                            next_token = right[i + 1]
-                            if isinstance(next_token, type):
-                                self.follow.add(next_token)
-                            else:
-                                next_first = rules[next_token].first
-                                self.follow.update(next_first - set([EPSILON]))
-                                if EPSILON in next_first and next_token != self.left:
-                                    self.follow.update(
-                                        rules[next_token].calc_follow(rules)
-                                    )
-                        else:
-                            if rule.left != self.left:
-                                self.follow.update(rule.calc_follow(rules))
-
-        self.follow_built = True
-        logger.debug("Follow(%s) = %s", self.left, self.follow)
+        if not self.follow_built:
+            fs = {n: r.first for n, r in rules.items()}
+            fw = compute_follow_sets(rules, fs)
+            for n, r in rules.items():
+                r.follow = fw[n]
+                r.follow_built = True
         return self.follow
 
     def __hash__(self) -> int:
@@ -557,6 +463,103 @@ class Rule[T]:
     def items(self) -> set[Item[T]]:
         """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
         return set(Item(self.left, right, maker) for right, maker in self.rights)
+
+
+def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token]]]:
+    """Compute FIRST sets for all non-terminals via worklist fixed-point iteration.
+
+    Iterates over all productions until no FIRST set changes.  Handles
+    ε-productions and nullable non-terminals by continuing past them in the
+    symbol sequence.
+
+    Args:
+        rules: Complete grammar mapping non-terminal name → ``Rule``.
+
+    Returns:
+        Mapping from non-terminal name to its FIRST set.
+    """
+    first: dict[str, set[type[Token]]] = {name: set() for name in rules}
+    changed = True
+    while changed:
+        changed = False
+        for name, rule in rules.items():
+            for right, _ in rule.rights:
+                if not right:
+                    if EPSILON not in first[name]:
+                        first[name].add(EPSILON)
+                        changed = True
+                    continue
+                for sym in right:
+                    if isinstance(sym, type):
+                        if sym is EPSILON:
+                            continue
+                        if sym not in first[name]:
+                            first[name].add(sym)
+                            changed = True
+                        break
+                    else:
+                        added = first[sym] - {EPSILON} - first[name]
+                        if added:
+                            first[name].update(added)
+                            changed = True
+                        if EPSILON not in first[sym]:
+                            break
+                else:
+                    if EPSILON not in first[name]:
+                        first[name].add(EPSILON)
+                        changed = True
+    return first
+
+
+def compute_follow_sets[T](
+    rules: dict[str, Rule[T]],
+    first_sets: dict[str, set[type[Token]]],
+) -> dict[str, set[type[Token]]]:
+    """Compute FOLLOW sets for all non-terminals via worklist fixed-point iteration.
+
+    Seeds EOS into every augmented start symbol, then propagates terminals
+    through productions until no FOLLOW set changes.  Requires FIRST sets
+    to have been computed first.
+
+    Args:
+        rules: Complete grammar mapping non-terminal name → ``Rule``.
+        first_sets: Precomputed FIRST sets (from ``compute_first_sets``).
+
+    Returns:
+        Mapping from non-terminal name to its FOLLOW set.
+    """
+    follow: dict[str, set[type[Token]]] = {name: set() for name in rules}
+    for name in rules:
+        if isinstance(name, StartVariable):
+            follow[name].add(EOS)
+    changed = True
+    while changed:
+        changed = False
+        for lhs, rule in rules.items():
+            for right, _ in rule.rights:
+                for i, sym in enumerate(right):
+                    if not isinstance(sym, str):
+                        continue
+                    trailer: set[type[Token]] = set()
+                    all_nullable = True
+                    for next_sym in right[i + 1 :]:
+                        if isinstance(next_sym, type):
+                            trailer.add(next_sym)
+                            all_nullable = False
+                            break
+                        else:
+                            next_first = first_sets[next_sym]
+                            trailer.update(next_first - {EPSILON})
+                            if EPSILON not in next_first:
+                                all_nullable = False
+                                break
+                    if all_nullable:
+                        trailer.update(follow[lhs])
+                    added = trailer - follow[sym]
+                    if added:
+                        follow[sym].update(added)
+                        changed = True
+    return follow
 
 
 def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[Item[T]]:
@@ -677,8 +680,10 @@ class Parser[T]:
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
         # when computing FOLLOW sets in Phase 3.
-        for rule in rules.values():
-            rule.calc_first(rules)
+        first_sets = compute_first_sets(rules)
+        for name, rule in rules.items():
+            rule.first = first_sets[name]
+            rule.first_built = True
 
         # ── Phase 3: Compute FOLLOW sets (SLR(1) lookaheads) ─────────────────
         # In SLR(1), a reduce action for rule A → α fires on every token in
@@ -687,8 +692,10 @@ class Parser[T]:
         # Spurious conflicts arise when FOLLOW(A) contains tokens that cannot
         # actually follow A in the specific state.  LALR(1) (T6) eliminates
         # this by computing per-item lookaheads.
-        for rule in rules.values():
-            rule.calc_follow(rules)
+        follow_sets = compute_follow_sets(rules, first_sets)
+        for name, rule in rules.items():
+            rule.follow = follow_sets[name]
+            rule.follow_built = True
 
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()

@@ -29,7 +29,8 @@ dev = [
     "isort>=5"
 ]
 test = [
-    "pytest>=7"
+    "pytest>=7",
+    "pytest-timeout>=2"
 ]
 type = [
     "pyright>=1.1"
