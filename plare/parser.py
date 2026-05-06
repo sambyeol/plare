@@ -463,74 +463,19 @@ class Rule[T]:
         self.follow_built = False
 
     def calc_first(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Compute FIRST(A) for this non-terminal using SLR(1) conventions.
-
-        SLR(1) FIRST-set computation (Aho-Sethi-Ullman §4.4):
-          FIRST(A) is the set of terminals that can begin any string derivable
-          from A, plus EPSILON if A can derive the empty string.
-
-        This implementation uses a re-entry guard (``first_built``) rather than
-        a proper worklist fixed-point.  It handles direct left-recursion
-        ``A → A α`` by deferring the recursive suffix ``α`` until after the
-        non-recursive alternatives have been processed.
-
-        Invariant relied upon: ``rules`` must be the complete grammar dict so
-        that FIRST sets for all referenced non-terminals can be looked up
-        recursively.  For mutually recursive rules the guard may cause
-        incomplete results — this is addressed in T2 with a proper fixed-point
-        algorithm.
+        """Return FIRST(A), computing it via ``compute_first_sets`` if needed.
 
         Args:
-            rules: Complete mapping of non-terminal name → ``Rule`` for the
-                current grammar.
+            rules: Complete grammar mapping non-terminal name → ``Rule``.
 
         Returns:
             The FIRST set for this non-terminal (also stored in ``self.first``).
         """
-        if self.first_built:
-            return self.first
-
-        recursive_rights = list[list[Symbol]]()
-        self.first = set()
-        for right, _ in self.rights:
-            if len(right) == 0:
-                self.first.add(EPSILON)
-                continue
-            for i, token in enumerate(right):
-                if isinstance(token, type):
-                    if token == EPSILON:
-                        continue
-                    self.first.add(token)
-                    break
-
-                else:
-                    if token == self.left:
-                        recursive_rights.append(right[i + 1 :])
-                        break
-                    token_first = rules[token].calc_first(rules)
-                    self.first.update(token_first)
-                    if EPSILON not in token_first:
-                        break
-
-        if EPSILON in self.first:
-            for right in recursive_rights:
-                for token in right:
-                    if isinstance(token, type):
-                        if token == EPSILON:
-                            continue
-                        self.first.add(token)
-                        break
-
-                    else:
-                        if token == self.left:
-                            continue
-                        token_first = rules[token].calc_first(rules)
-                        self.first.update(token_first)
-                        if EPSILON not in token_first:
-                            break
-
-        self.first_built = True
-        logger.debug("First(%s) = %s", self.left, self.first)
+        if not self.first_built:
+            fs = compute_first_sets(rules)
+            for n, r in rules.items():
+                r.first = fs[n]
+                r.first_built = True
         return self.first
 
     def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
@@ -722,8 +667,10 @@ class Parser[T]:
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
         # when computing FOLLOW sets in Phase 3.
-        for rule in rules.values():
-            rule.calc_first(rules)
+        first_sets = compute_first_sets(rules)
+        for name, rule in rules.items():
+            rule.first = first_sets[name]
+            rule.first_built = True
 
         # ── Phase 3: Compute FOLLOW sets (SLR(1) lookaheads) ─────────────────
         # In SLR(1), a reduce action for rule A → α fires on every token in
