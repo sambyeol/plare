@@ -548,8 +548,9 @@ def compute_follow_sets[T](
                             all_nullable = False
                             break
                         else:
-                            trailer.update(first_sets[next_sym] - {EPSILON})
-                            if EPSILON not in first_sets[next_sym]:
+                            next_first = first_sets[next_sym]
+                            trailer.update(next_first - {EPSILON})
+                            if EPSILON not in next_first:
                                 all_nullable = False
                                 break
                     if all_nullable:
