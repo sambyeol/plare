@@ -1,6 +1,7 @@
 """Unit tests for compute_first_sets and compute_follow_sets."""
 
 from __future__ import annotations
+from typing import Any
 
 import pytest
 
@@ -17,11 +18,11 @@ from plare.parser import (
 from plare.token import Token
 
 
-class _NullMaker(Maker[Token]):
-    """Maker stub for tests — the pure functions never call it."""
+class Null:
+    """A dummy value for testing — the makers are stubs never called by the pure functions."""
 
-    def __call__(self, *xs: Token) -> Token:
-        raise NotImplementedError
+    def __init__(self, *xs: Any) -> None:
+        pass
 
 
 class ATok(Token):
@@ -94,16 +95,9 @@ class RParen(Token):
         self.offset = offset
 
 
-_null = _NullMaker()
-
-
-def _make_rule(left: str, rights: list[list[Symbol]]) -> Rule[Token]:
+def make_rule(left: str, rights: list[list[Symbol]]) -> Rule[Null]:
     """Build a Rule for testing — the makers are stubs never called by the pure functions."""
-    r: Rule[Token] = object.__new__(Rule)
-    r.left = left
-    r.rights = [(list(rhs), _null) for rhs in rights]
-    r.first_built = False
-    r.follow_built = False
+    r: Rule[Null] = Rule(left, [(list(rhs), Null, []) for rhs in rights])
     return r
 
 
@@ -114,9 +108,9 @@ def test_mutual_recursion_first_terminates() -> None:
     # B → A b | b
     # FIRST(A) = {a, b}  (a from A→a; b from B→b which feeds into A→Ba)
     # FIRST(B) = {a, b}  (b from B→b; a from A→a which feeds into B→Ab)
-    rules: dict[str, Rule] = {
-        "A": _make_rule("A", [["B", ATok], [ATok]]),
-        "B": _make_rule("B", [["A", BTok], [BTok]]),
+    rules: dict[str, Rule[Null]] = {
+        "A": make_rule("A", [["B", ATok], [ATok]]),
+        "B": make_rule("B", [["A", BTok], [BTok]]),
     }
     first = compute_first_sets(rules)
 
@@ -134,10 +128,10 @@ def test_epsilon_production_propagates_to_first() -> None:
     # B → b | ε
     # C → c
     # FIRST(A) = {b, c, a}  (b and ε from B; since B nullable, c from C)
-    rules: dict[str, Rule] = {
-        "A": _make_rule("A", [["B", "C"], [ATok]]),
-        "B": _make_rule("B", [[BTok], []]),
-        "C": _make_rule("C", [[CTok]]),
+    rules: dict[str, Rule[Null]] = {
+        "A": make_rule("A", [["B", "C"], [ATok]]),
+        "B": make_rule("B", [[BTok], []]),
+        "C": make_rule("C", [[CTok]]),
     }
     first = compute_first_sets(rules)
 
@@ -149,18 +143,18 @@ def test_epsilon_production_propagates_to_first() -> None:
     assert EPSILON not in first["C"]
 
 
-def test_chain_of_nullable_nonterminals() -> None:
+def test_chain_ofnullable_nonterminals() -> None:
     """When B, C are nullable, D's terminal reaches FIRST(A)."""
     # A → B C D | x
     # B → ε
     # C → ε
     # D → d
     # FIRST(A) = {d, x}
-    rules: dict[str, Rule] = {
-        "A": _make_rule("A", [["B", "C", "D"], [XTok]]),
-        "B": _make_rule("B", [[]]),
-        "C": _make_rule("C", [[]]),
-        "D": _make_rule("D", [[DTok]]),
+    rules: dict[str, Rule[Null]] = {
+        "A": make_rule("A", [["B", "C", "D"], [XTok]]),
+        "B": make_rule("B", [[]]),
+        "C": make_rule("C", [[]]),
+        "D": make_rule("D", [[DTok]]),
     }
     first = compute_first_sets(rules)
 
@@ -179,10 +173,10 @@ def test_dragon_book_expression_grammar_first() -> None:
     Expected:
         FIRST(E) = FIRST(T) = FIRST(F) = {LParen, IdTok}
     """
-    rules: dict[str, Rule] = {
-        "E": _make_rule("E", [["E", PlusTok, "T"], ["T"]]),
-        "T": _make_rule("T", [["T", StarTok, "F"], ["F"]]),
-        "F": _make_rule("F", [[LParen, "E", RParen], [IdTok]]),
+    rules: dict[str, Rule[Null]] = {
+        "E": make_rule("E", [["E", PlusTok, "T"], ["T"]]),
+        "T": make_rule("T", [["T", StarTok, "F"], ["F"]]),
+        "F": make_rule("F", [[LParen, "E", RParen], [IdTok]]),
     }
     first = compute_first_sets(rules)
 
@@ -201,11 +195,11 @@ def test_dragon_book_expression_grammar_follow() -> None:
         FOLLOW(F) = {PlusTok, StarTok, RParen, EOS}
     """
     start = StartVariable("E")
-    rules: dict[str, Rule] = {
-        start: _make_rule(start, [["E"]]),
-        "E": _make_rule("E", [["E", PlusTok, "T"], ["T"]]),
-        "T": _make_rule("T", [["T", StarTok, "F"], ["F"]]),
-        "F": _make_rule("F", [[LParen, "E", RParen], [IdTok]]),
+    rules: dict[str, Rule[Null]] = {
+        start: make_rule(start, [["E"]]),
+        "E": make_rule("E", [["E", PlusTok, "T"], ["T"]]),
+        "T": make_rule("T", [["T", StarTok, "F"], ["F"]]),
+        "F": make_rule("F", [[LParen, "E", RParen], [IdTok]]),
     }
     first = compute_first_sets(rules)
     follow = compute_follow_sets(rules, first)
