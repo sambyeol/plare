@@ -563,7 +563,7 @@ def compute_follow_sets[T](
     return follow
 
 
-def _symbol_sort_key(s: Symbol) -> tuple[int, str]:
+def symbol_sort_key(s: Symbol) -> tuple[int, str]:
     """Return a sort key that gives a stable total order over grammar symbols.
 
     Terminals (token classes) sort before non-terminals (strings); within each
@@ -722,13 +722,13 @@ class Parser[T]:
         # items to the assigned state id, giving O(1) deduplication instead of
         # a linear scan.  ``worklist`` is a deque so processing order is
         # deterministic (FIFO) and independent of Python's hash randomization.
-        # Symbols leaving each state are sorted by ``_symbol_sort_key`` so state
+        # Symbols leaving each state are sorted by ``symbol_sort_key`` so state
         # id assignment is stable across runs for the same grammar.
         state_index: dict[frozenset[Item[T]], int] = {}
         state_list: list[State[T]] = []
         edges: list[tuple[State[T], Symbol, State[T]]] = []
 
-        def _intern_state(itemset: set[Item[T]]) -> tuple[State[T], bool]:
+        def intern_state(itemset: set[Item[T]]) -> tuple[State[T], bool]:
             """Register *itemset* as a state if not yet seen; return (state, is_new)."""
             key = frozenset(itemset)
             if key in state_index:
@@ -743,7 +743,7 @@ class Parser[T]:
         bfs: deque[State[T]] = deque()
         for i, (left, rule) in enumerate(entry_rules.items()):
             self.entry_state[left.orig] = i
-            init_state, _ = _intern_state(closure(rule.items, all_items))
+            init_state, _ = intern_state(closure(rule.items, all_items))
             bfs.append(init_state)
 
         while bfs:
@@ -752,11 +752,11 @@ class Parser[T]:
             logger.debug("State %d:\n%s", state.id, state)
             nexts = sorted(
                 {sym for item in state.items if (sym := item.next) is not None},
-                key=_symbol_sort_key,
+                key=symbol_sort_key,
             )
             logger.debug("Nexts: %s", nexts)
             for symbol in nexts:
-                target_state, is_new = _intern_state(
+                target_state, is_new = intern_state(
                     goto(state.items, symbol, all_items)
                 )
                 edges.append((state, symbol, target_state))
