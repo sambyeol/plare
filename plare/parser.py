@@ -388,8 +388,9 @@ class Table[T]:
 def compute_first_sets[T](rules: dict[str, "Rule[T]"]) -> dict[str, set[type[Token]]]:
     """Compute FIRST sets for all non-terminals via worklist fixed-point iteration.
 
-    Replaces the recursive ``Rule.calc_first`` approach, which failed on
-    mutually recursive grammars.  Iterates until no FIRST set changes.
+    Iterates over all productions until no FIRST set changes.  Handles
+    ε-productions and nullable non-terminals by continuing past them in the
+    symbol sequence.
 
     Args:
         rules: Complete grammar mapping non-terminal name → ``Rule``.
@@ -436,8 +437,8 @@ def compute_follow_sets[T](
 ) -> dict[str, set[type[Token]]]:
     """Compute FOLLOW sets for all non-terminals via worklist fixed-point iteration.
 
-    Replaces the recursive ``Rule.calc_follow`` approach, which produced
-    incomplete results under mutual FOLLOW dependencies.  Requires FIRST sets
+    Seeds EOS into every augmented start symbol, then propagates terminals
+    through productions until no FOLLOW set changes.  Requires FIRST sets
     to have been computed first.
 
     Args:
