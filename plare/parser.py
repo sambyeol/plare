@@ -19,6 +19,7 @@ Construction pipeline (``Parser.__init__``):
 
 from __future__ import annotations
 
+from collections import deque
 from itertools import chain
 from typing import Any, Iterable, Protocol
 
@@ -562,6 +563,19 @@ def compute_follow_sets[T](
     return follow
 
 
+def _symbol_sort_key(s: Symbol) -> tuple[int, str]:
+    """Return a sort key that gives a stable total order over grammar symbols.
+
+    Terminals (token classes) sort before non-terminals (strings); within each
+    group items are ordered alphabetically by name.  This ensures that the BFS
+    expansion of each state visits successor symbols in the same order on every
+    Python run, regardless of hash randomization.
+    """
+    if isinstance(s, type):
+        return (0, s.__name__)
+    return (1, s)
+
+
 def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[Item[T]]:
     """Compute the LR(0) closure of an item set.
 
@@ -582,15 +596,15 @@ def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[I
         The closed item set (a new ``set`` that is a superset of ``items``).
     """
     items = set(items)
-    worklist = set(items)
-    while len(worklist) > 0:
-        item = worklist.pop()
+    worklist: deque[Item[T]] = deque(items)
+    while worklist:
+        item = worklist.popleft()
         next = item.next
         if next is None or isinstance(next, type):
             continue
         to_update = all_items[next] - items
-        if len(to_update) > 0:
-            worklist.update(to_update)
+        if to_update:
+            worklist.extend(to_update)
             items.update(to_update)
     return items
 
@@ -704,43 +718,54 @@ class Parser[T]:
                 all_tokens.update(t for t in right if isinstance(t, type))
 
         # ── Phase 4: Build LR(0) canonical collection ────────────────────────
-        # Start with one initial state per augmented entry rule, then expand
-        # via goto BFS until no new states are found.  ``states`` is a set so
-        # duplicate item sets (same items, different tentative id) collapse into
-        # the existing state automatically via State.__eq__.
-        states = set[State[T]]()
+        # BFS over the LR(0) automaton.  ``state_index`` maps a frozenset of
+        # items to the assigned state id, giving O(1) deduplication instead of
+        # a linear scan.  ``worklist`` is a deque so processing order is
+        # deterministic (FIFO) and independent of Python's hash randomization.
+        # Symbols leaving each state are sorted by ``_symbol_sort_key`` so state
+        # id assignment is stable across runs for the same grammar.
+        state_index: dict[frozenset[Item[T]], int] = {}
+        state_list: list[State[T]] = []
+        edges: list[tuple[State[T], Symbol, State[T]]] = []
+
+        def _intern_state(itemset: set[Item[T]]) -> tuple[State[T], bool]:
+            """Register *itemset* as a state if not yet seen; return (state, is_new)."""
+            key = frozenset(itemset)
+            if key in state_index:
+                return state_list[state_index[key]], False
+            sid = len(state_list)
+            state = State(sid, itemset)
+            state_index[key] = sid
+            state_list.append(state)
+            return state, True
+
         self.entry_state = {}
+        bfs: deque[State[T]] = deque()
         for i, (left, rule) in enumerate(entry_rules.items()):
             self.entry_state[left.orig] = i
-            states.add(State(i, closure(rule.items, all_items)))
-        edges = set[tuple[State[T], Symbol, State[T]]]()
+            init_state, _ = _intern_state(closure(rule.items, all_items))
+            bfs.append(init_state)
 
-        worklist = set(states)
-        while len(worklist) > 0:
-            logger.debug("Worklist: %d items", len(worklist))
-            state = worklist.pop()
+        while bfs:
+            state = bfs.popleft()
+            logger.debug("Worklist: %d items", len(bfs))
             logger.debug("State %d:\n%s", state.id, state)
-            nexts = {next for item in state.items if (next := item.next) is not None}
+            nexts = sorted(
+                {sym for item in state.items if (sym := item.next) is not None},
+                key=_symbol_sort_key,
+            )
             logger.debug("Nexts: %s", nexts)
-
             for symbol in nexts:
-                len_prev_states = len(states)
-                len_prev_edges = len(edges)
-
-                next_state = State(len(states), goto(state.items, symbol, all_items))
-                states.add(next_state)
-                for exist in states:
-                    if exist == next_state:
-                        next_state = exist
-                        break
-                edges.add((state, symbol, next_state))
-
-                if len(states) != len_prev_states or len(edges) != len_prev_edges:
-                    worklist.update({next_state})
+                target_state, is_new = _intern_state(
+                    goto(state.items, symbol, all_items)
+                )
+                edges.append((state, symbol, target_state))
+                if is_new:
+                    bfs.append(target_state)
 
         # ── Phase 5: Populate action/goto table ──────────────────────────────
         # Shift and Goto actions come directly from the automaton edges.
-        self.table = Table(len(states))
+        self.table = Table(len(state_list))
         for prev, symbol, next in edges:
             if isinstance(symbol, type):
                 self.table[prev.id, symbol] = Shift(next.id)
@@ -756,7 +781,7 @@ class Parser[T]:
         #     left associativity.
         #   Reduce/Reduce: prefer the higher-precedence production; raise
         #     ParserError when precedences are equal (ambiguous grammar).
-        for state in states:
+        for state in state_list:
             for item in state.items:
                 if item.next is None:
                     if item.left in start_variables:
