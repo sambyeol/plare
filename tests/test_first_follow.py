@@ -8,7 +8,6 @@ import pytest
 from plare.parser import (
     EOS,
     EPSILON,
-    Maker,
     Rule,
     StartVariable,
     Symbol,
