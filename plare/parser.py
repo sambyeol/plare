@@ -430,6 +430,56 @@ def compute_first_sets[T](rules: dict[str, "Rule[T]"]) -> dict[str, set[type[Tok
     return first
 
 
+def compute_follow_sets[T](
+    rules: dict[str, "Rule[T]"],
+    first_sets: dict[str, set[type[Token]]],
+) -> dict[str, set[type[Token]]]:
+    """Compute FOLLOW sets for all non-terminals via worklist fixed-point iteration.
+
+    Replaces the recursive ``Rule.calc_follow`` approach, which produced
+    incomplete results under mutual FOLLOW dependencies.  Requires FIRST sets
+    to have been computed first.
+
+    Args:
+        rules: Complete grammar mapping non-terminal name → ``Rule``.
+        first_sets: Precomputed FIRST sets (from ``compute_first_sets``).
+
+    Returns:
+        Mapping from non-terminal name to its FOLLOW set.
+    """
+    follow: dict[str, set[type[Token]]] = {name: set() for name in rules}
+    for name in rules:
+        if isinstance(name, StartVariable):
+            follow[name].add(EOS)
+    changed = True
+    while changed:
+        changed = False
+        for lhs, rule in rules.items():
+            for right, _ in rule.rights:
+                for i, sym in enumerate(right):
+                    if not isinstance(sym, str):
+                        continue
+                    trailer: set[type[Token]] = set()
+                    all_nullable = True
+                    for next_sym in right[i + 1 :]:
+                        if isinstance(next_sym, type):
+                            trailer.add(next_sym)
+                            all_nullable = False
+                            break
+                        else:
+                            trailer.update(first_sets[next_sym] - {EPSILON})
+                            if EPSILON not in first_sets[next_sym]:
+                                all_nullable = False
+                                break
+                    if all_nullable:
+                        trailer.update(follow[lhs])
+                    added = trailer - follow[sym]
+                    if added:
+                        follow[sym].update(added)
+                        changed = True
+    return follow
+
+
 class Rule[T]:
     """All RHS alternatives for a single non-terminal, together with its FIRST/FOLLOW sets.
 
