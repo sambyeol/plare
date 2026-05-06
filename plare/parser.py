@@ -385,7 +385,7 @@ class Table[T]:
         self.table[state][symbol] = action
 
 
-def compute_first_sets[T](rules: dict[str, "Rule[T]"]) -> dict[str, set[type[Token]]]:
+def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token]]]:
     """Compute FIRST sets for all non-terminals via worklist fixed-point iteration.
 
     Iterates over all productions until no FIRST set changes.  Handles
@@ -432,7 +432,7 @@ def compute_first_sets[T](rules: dict[str, "Rule[T]"]) -> dict[str, set[type[Tok
 
 
 def compute_follow_sets[T](
-    rules: dict[str, "Rule[T]"],
+    rules: dict[str, Rule[T]],
     first_sets: dict[str, set[type[Token]]],
 ) -> dict[str, set[type[Token]]]:
     """Compute FOLLOW sets for all non-terminals via worklist fixed-point iteration.
