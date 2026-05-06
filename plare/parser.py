@@ -385,6 +385,86 @@ class Table[T]:
         self.table[state][symbol] = action
 
 
+class Rule[T]:
+    """All RHS alternatives for a single non-terminal, together with its FIRST/FOLLOW sets.
+
+    ``Rule`` is the unit of grammar specification.  One ``Rule`` object
+    aggregates every production ``A → rhs₁ | rhs₂ | …`` for a given
+    non-terminal ``A``.
+
+    Attributes:
+        left: The non-terminal name (LHS).
+        rights: List of ``(rhs_symbols, maker)`` pairs, one per alternative.
+        first: FIRST(A) — populated by ``calc_first``.
+        follow: FOLLOW(A) — populated by ``calc_follow``.
+    """
+
+    left: str
+    rights: list[tuple[list[Symbol], Maker[T]]]
+    first: set[type[Token]]
+    follow: set[type[Token]]
+
+    def __init__(
+        self,
+        left: str,
+        rights: list[tuple[list[Symbol], type[T] | None, list[int]]],
+    ) -> None:
+        self.left = left
+        self.rights = [
+            (right, TMaker(action, args) if action is not None else IDMaker(*args))
+            for right, action, args in rights
+        ]
+        self.first_built = False
+        self.follow_built = False
+
+    def calc_first(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
+        """Return FIRST(A), computing it via ``compute_first_sets`` if needed.
+
+        Args:
+            rules: Complete grammar mapping non-terminal name → ``Rule``.
+
+        Returns:
+            The FIRST set for this non-terminal (also stored in ``self.first``).
+        """
+        if not self.first_built:
+            fs = compute_first_sets(rules)
+            for n, r in rules.items():
+                r.first = fs[n]
+                r.first_built = True
+        return self.first
+
+    def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
+        """Return FOLLOW(A), computing it via ``compute_follow_sets`` if needed.
+
+        Args:
+            rules: Complete grammar mapping non-terminal name → ``Rule``.
+
+        Returns:
+            The FOLLOW set for this non-terminal (also stored in ``self.follow``).
+        """
+        if not self.follow_built:
+            fs = {n: r.first for n, r in rules.items()}
+            fw = compute_follow_sets(rules, fs)
+            for n, r in rules.items():
+                r.follow = fw[n]
+                r.follow_built = True
+        return self.follow
+
+    def __hash__(self) -> int:
+        return hash(self.left)
+
+    def __eq__(self, value: Any) -> bool:
+        return isinstance(value, Rule) and self.left == value.left
+
+    def __repr__(self) -> str:
+        return f"Rule({self.left})"
+
+    @property
+    def items(self) -> set[Item[T]]:
+        """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
+        return set(Item(self.left, right, maker) for right, maker in self.rights)
+
+
 def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token]]]:
     """Compute FIRST sets for all non-terminals via worklist fixed-point iteration.
 
@@ -479,86 +559,6 @@ def compute_follow_sets[T](
                         follow[sym].update(added)
                         changed = True
     return follow
-
-
-class Rule[T]:
-    """All RHS alternatives for a single non-terminal, together with its FIRST/FOLLOW sets.
-
-    ``Rule`` is the unit of grammar specification.  One ``Rule`` object
-    aggregates every production ``A → rhs₁ | rhs₂ | …`` for a given
-    non-terminal ``A``.
-
-    Attributes:
-        left: The non-terminal name (LHS).
-        rights: List of ``(rhs_symbols, maker)`` pairs, one per alternative.
-        first: FIRST(A) — populated by ``calc_first``.
-        follow: FOLLOW(A) — populated by ``calc_follow``.
-    """
-
-    left: str
-    rights: list[tuple[list[Symbol], Maker[T]]]
-    first: set[type[Token]]
-    follow: set[type[Token]]
-
-    def __init__(
-        self,
-        left: str,
-        rights: list[tuple[list[Symbol], type[T] | None, list[int]]],
-    ) -> None:
-        self.left = left
-        self.rights = [
-            (right, TMaker(action, args) if action is not None else IDMaker(*args))
-            for right, action, args in rights
-        ]
-        self.first_built = False
-        self.follow_built = False
-
-    def calc_first(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Return FIRST(A), computing it via ``compute_first_sets`` if needed.
-
-        Args:
-            rules: Complete grammar mapping non-terminal name → ``Rule``.
-
-        Returns:
-            The FIRST set for this non-terminal (also stored in ``self.first``).
-        """
-        if not self.first_built:
-            fs = compute_first_sets(rules)
-            for n, r in rules.items():
-                r.first = fs[n]
-                r.first_built = True
-        return self.first
-
-    def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Return FOLLOW(A), computing it via ``compute_follow_sets`` if needed.
-
-        Args:
-            rules: Complete grammar mapping non-terminal name → ``Rule``.
-
-        Returns:
-            The FOLLOW set for this non-terminal (also stored in ``self.follow``).
-        """
-        if not self.follow_built:
-            fs = {n: r.first for n, r in rules.items()}
-            fw = compute_follow_sets(rules, fs)
-            for n, r in rules.items():
-                r.follow = fw[n]
-                r.follow_built = True
-        return self.follow
-
-    def __hash__(self) -> int:
-        return hash(self.left)
-
-    def __eq__(self, value: Any) -> bool:
-        return isinstance(value, Rule) and self.left == value.left
-
-    def __repr__(self) -> str:
-        return f"Rule({self.left})"
-
-    @property
-    def items(self) -> set[Item[T]]:
-        """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
-        return set(Item(self.left, right, maker) for right, maker in self.rights)
 
 
 def closure[T](items: set[Item[T]], all_items: dict[str, set[Item[T]]]) -> set[Item[T]]:
