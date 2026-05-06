@@ -529,59 +529,20 @@ class Rule[T]:
         return self.first
 
     def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Compute FOLLOW(A) for this non-terminal using SLR(1) conventions.
-
-        SLR(1) FOLLOW-set computation (Aho-Sethi-Ullman §4.4):
-          FOLLOW(A) is the set of terminals that can appear immediately to the
-          right of A in some sentential form.  EOS (end-of-stream) is added for
-          each augmented start symbol.
-
-        Invariant relied upon: ``calc_first`` must have been called on *all*
-        rules before this method is invoked, because FOLLOW propagation through
-        nullable suffixes reads ``rule.first`` directly.
-
-        This implementation also uses a re-entry guard (``follow_built``).
-        Mutual recursion in FOLLOW dependencies (e.g. FOLLOW(A) ⊇ FOLLOW(B)
-        ⊇ FOLLOW(A)) can cause incomplete results with this approach — fixed in
-        T2.
+        """Return FOLLOW(A), computing it via ``compute_follow_sets`` if needed.
 
         Args:
-            rules: Complete grammar dict (same object passed to ``calc_first``).
+            rules: Complete grammar mapping non-terminal name → ``Rule``.
 
         Returns:
             The FOLLOW set for this non-terminal (also stored in ``self.follow``).
         """
-        if self.follow_built:
-            return self.follow
-
-        self.follow = set()
-        if isinstance(self.left, StartVariable):
-            self.follow.add(EOS)
-
-        else:
-            for rule in rules.values():
-                for right, _ in rule.rights:
-                    for i, token in enumerate(right):
-                        if not isinstance(token, str) or token != self.left:
-                            continue
-
-                        if i + 1 < len(right):
-                            next_token = right[i + 1]
-                            if isinstance(next_token, type):
-                                self.follow.add(next_token)
-                            else:
-                                next_first = rules[next_token].first
-                                self.follow.update(next_first - set([EPSILON]))
-                                if EPSILON in next_first and next_token != self.left:
-                                    self.follow.update(
-                                        rules[next_token].calc_follow(rules)
-                                    )
-                        else:
-                            if rule.left != self.left:
-                                self.follow.update(rule.calc_follow(rules))
-
-        self.follow_built = True
-        logger.debug("Follow(%s) = %s", self.left, self.follow)
+        if not self.follow_built:
+            fs = {n: r.first for n, r in rules.items()}
+            fw = compute_follow_sets(rules, fs)
+            for n, r in rules.items():
+                r.follow = fw[n]
+                r.follow_built = True
         return self.follow
 
     def __hash__(self) -> int:
@@ -729,8 +690,10 @@ class Parser[T]:
         # Spurious conflicts arise when FOLLOW(A) contains tokens that cannot
         # actually follow A in the specific state.  LALR(1) (T6) eliminates
         # this by computing per-item lookaheads.
-        for rule in rules.values():
-            rule.calc_follow(rules)
+        follow_sets = compute_follow_sets(rules, first_sets)
+        for name, rule in rules.items():
+            rule.follow = follow_sets[name]
+            rule.follow_built = True
 
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()
