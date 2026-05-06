@@ -7,12 +7,21 @@ import pytest
 from plare.parser import (
     EOS,
     EPSILON,
+    Maker,
     Rule,
     StartVariable,
+    Symbol,
     compute_first_sets,
     compute_follow_sets,
 )
 from plare.token import Token
+
+
+class _NullMaker(Maker[Token]):
+    """Maker stub for tests — the pure functions never call it."""
+
+    def __call__(self, *xs: Token) -> Token:
+        raise NotImplementedError
 
 
 class ATok(Token):
@@ -85,11 +94,14 @@ class RParen(Token):
         self.offset = offset
 
 
-def _make_rule(left: str, rights: list[list]) -> Rule:
-    """Build a Rule bypassing action makers — only rule.rights symbols matter."""
-    r: Rule = object.__new__(Rule)
+_null = _NullMaker()
+
+
+def _make_rule(left: str, rights: list[list[Symbol]]) -> Rule[Token]:
+    """Build a Rule for testing — the makers are stubs never called by the pure functions."""
+    r: Rule[Token] = object.__new__(Rule)
     r.left = left
-    r.rights = [(list(rhs), None) for rhs in rights]  # type: ignore[assignment]
+    r.rights = [(list(rhs), _null) for rhs in rights]
     r.first_built = False
     r.follow_built = False
     return r
