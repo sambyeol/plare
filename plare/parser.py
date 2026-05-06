@@ -637,6 +637,36 @@ def goto[T](
     )
 
 
+def intern_state[T](
+    itemset: set[Item[T]],
+    state_index: dict[frozenset[Item[T]], int],
+    state_list: list[State[T]],
+) -> tuple[State[T], bool]:
+    """Register *itemset* as an LR(0) state if not yet seen; return (state, is_new).
+
+    Looks up the closed item set in *state_index* for O(1) deduplication.
+    If the itemset is new, assigns the next available id, appends a new
+    ``State`` to *state_list*, and records the mapping in *state_index*.
+
+    Args:
+        itemset: The closed item set that defines a candidate state.
+        state_index: Mapping from ``frozenset[Item]`` to already-assigned state id.
+        state_list: Ordered list of states; index equals state id.
+
+    Returns:
+        A tuple ``(state, is_new)`` where ``is_new`` is ``True`` when the
+        itemset was not previously registered.
+    """
+    key = frozenset(itemset)
+    if key in state_index:
+        return state_list[state_index[key]], False
+    sid = len(state_list)
+    state = State(sid, itemset)
+    state_index[key] = sid
+    state_list.append(state)
+    return state, True
+
+
 class Parser[T]:
     """SLR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
@@ -728,22 +758,13 @@ class Parser[T]:
         state_list: list[State[T]] = []
         edges: list[tuple[State[T], Symbol, State[T]]] = []
 
-        def intern_state(itemset: set[Item[T]]) -> tuple[State[T], bool]:
-            """Register *itemset* as a state if not yet seen; return (state, is_new)."""
-            key = frozenset(itemset)
-            if key in state_index:
-                return state_list[state_index[key]], False
-            sid = len(state_list)
-            state = State(sid, itemset)
-            state_index[key] = sid
-            state_list.append(state)
-            return state, True
-
         self.entry_state = {}
         bfs: deque[State[T]] = deque()
         for i, (left, rule) in enumerate(entry_rules.items()):
             self.entry_state[left.orig] = i
-            init_state, _ = intern_state(closure(rule.items, all_items))
+            init_state, _ = intern_state(
+                closure(rule.items, all_items), state_index, state_list
+            )
             bfs.append(init_state)
 
         while bfs:
@@ -757,7 +778,7 @@ class Parser[T]:
             logger.debug("Nexts: %s", nexts)
             for symbol in nexts:
                 target_state, is_new = intern_state(
-                    goto(state.items, symbol, all_items)
+                    goto(state.items, symbol, all_items), state_index, state_list
                 )
                 edges.append((state, symbol, target_state))
                 if is_new:
