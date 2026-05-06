@@ -385,6 +385,51 @@ class Table[T]:
         self.table[state][symbol] = action
 
 
+def compute_first_sets[T](rules: dict[str, "Rule[T]"]) -> dict[str, set[type[Token]]]:
+    """Compute FIRST sets for all non-terminals via worklist fixed-point iteration.
+
+    Replaces the recursive ``Rule.calc_first`` approach, which failed on
+    mutually recursive grammars.  Iterates until no FIRST set changes.
+
+    Args:
+        rules: Complete grammar mapping non-terminal name → ``Rule``.
+
+    Returns:
+        Mapping from non-terminal name to its FIRST set.
+    """
+    first: dict[str, set[type[Token]]] = {name: set() for name in rules}
+    changed = True
+    while changed:
+        changed = False
+        for name, rule in rules.items():
+            for right, _ in rule.rights:
+                if not right:
+                    if EPSILON not in first[name]:
+                        first[name].add(EPSILON)
+                        changed = True
+                    continue
+                for sym in right:
+                    if isinstance(sym, type):
+                        if sym is EPSILON:
+                            continue
+                        if sym not in first[name]:
+                            first[name].add(sym)
+                            changed = True
+                        break
+                    else:
+                        added = first[sym] - {EPSILON} - first[name]
+                        if added:
+                            first[name].update(added)
+                            changed = True
+                        if EPSILON not in first[sym]:
+                            break
+                else:
+                    if EPSILON not in first[name]:
+                        first[name].add(EPSILON)
+                        changed = True
+    return first
+
+
 class Rule[T]:
     """All RHS alternatives for a single non-terminal, together with its FIRST/FOLLOW sets.
 
