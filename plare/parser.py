@@ -222,7 +222,7 @@ class State[T]:
         self.items = items
 
     def __hash__(self) -> int:
-        return sum(map(hash, (item for item in self.items)))
+        return hash(frozenset(self.items))
 
     def __eq__(self, other: State[T] | Any) -> bool:
         return isinstance(other, State) and self.items == other.items
