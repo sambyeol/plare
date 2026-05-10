@@ -195,7 +195,7 @@ class Item[T]:
         return f"{self.left} {arrow} {before_dot} . {after_dot}"
 
     def __hash__(self) -> int:
-        return hash(self.left) + sum(map(hash, self.right)) + hash(self.loc)
+        return hash((self.left, tuple(self.right), self.loc))
 
     def __eq__(self, value: Any) -> bool:
         return (
@@ -222,7 +222,7 @@ class State[T]:
         self.items = items
 
     def __hash__(self) -> int:
-        return sum(map(hash, (item for item in self.items)))
+        return hash(frozenset(self.items))
 
     def __eq__(self, other: State[T] | Any) -> bool:
         return isinstance(other, State) and self.items == other.items
