@@ -45,7 +45,9 @@ class Token:
         identity-by-source-position contract — it is intentional and does *not*
         compare token values.  The parser itself only cares about token *classes*,
         not instances, so this contract is used only in tests and edge-case
-        bookkeeping, not in the core parse loop.
+        bookkeeping, not in the core parse loop.  The hash incorporates the token
+        class, so instances of different subclasses at the same source position
+        have different hashes.
     """
 
     associative: assoc = "left"
@@ -63,7 +65,7 @@ class Token:
         self.offset = offset
 
     def __hash__(self) -> int:
-        return hash(self.lineno) + hash(self.offset)
+        return hash((type(self), self.lineno, self.offset))
 
     def __eq__(self, other: Any) -> bool:
         return (
