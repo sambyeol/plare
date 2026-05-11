@@ -761,47 +761,37 @@ class Parser[T]:
         # Using StartVariable ensures these rules are never confused with
         # user-defined rules, even if a user names a rule identically.
         #
-        # Resolve the optional 4th element (prec_token) in each grammar tuple.
-        # A 3-tuple (right, action, args) is passed through unchanged; a 4-tuple
+        # A 3-tuple (right, action, args) is accepted unchanged; a 4-tuple
         # (right, action, args, prec_token) is rewritten to
-        # (right, action, args, prec_token.precedence) so Rule.__init__ receives
-        # a plain int override rather than a token class.
-        normalized: dict[
-            str,
-            list[tuple[list[type[Token] | str], type[T] | None, list[int], int | None]],
-        ] = {}
-        normalized_indices: dict[str, list[int]] = {}
+        # (right, action, args, prec_token.precedence) so Rule receives a plain
+        # int override.  Each production is assigned a grammar-wide
+        # definition_index (global counter) so equal-precedence R/R conflicts
+        # can be resolved by definition order.
+        rules: dict[str, Rule[T]] = {}
+        start_variables: set[StartVariable] = set()
         global_idx = 0
-        for left, rights in grammar.items():
+        for left, productions in grammar.items():
             norm_rights: list[
                 tuple[list[type[Token] | str], type[T] | None, list[int], int | None]
             ] = []
-            for entry in rights:
+            for entry in productions:
                 if len(entry) == 4:
                     right, action, args, prec_token = entry
                     norm_rights.append((right, action, args, prec_token.precedence))
                 else:
                     right, action, args = entry
                     norm_rights.append((right, action, args, None))
-            normalized_indices[left] = list(
-                range(global_idx, global_idx + len(norm_rights))
+            rules[left] = Rule[T](
+                left,
+                norm_rights,
+                definition_indices=list(
+                    range(global_idx, global_idx + len(norm_rights))
+                ),
             )
+            start_var = StartVariable(left)
+            start_variables.add(start_var)
+            rules[start_var] = Rule[T](start_var, [([left], None, [0], None)])
             global_idx += len(norm_rights)
-            normalized[left] = norm_rights
-
-        entry_rules = {
-            StartVariable(left): Rule[T](
-                StartVariable(left), [([left], None, [0], None)]
-            )
-            for left in grammar.keys()
-        }
-        start_variables = set(entry_rules.keys())
-
-        rules = {
-            left: Rule[T](left, rights, definition_indices=normalized_indices[left])
-            for left, rights in normalized.items()
-        }
-        rules |= entry_rules
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
@@ -842,7 +832,9 @@ class Parser[T]:
 
         self.entry_state = {}
         bfs: deque[State[T]] = deque()
-        for i, (left, rule) in enumerate(entry_rules.items()):
+        for i, (left, rule) in enumerate(
+            (k, v) for k, v in rules.items() if isinstance(k, StartVariable)
+        ):
             self.entry_state[left.orig] = i
             init_state, _ = intern_state(
                 closure(rule.items, all_items), state_index, state_list
