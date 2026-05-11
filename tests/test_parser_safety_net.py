@@ -598,14 +598,17 @@ class Node8x:
 
 @pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_only_aho_grammar_variant_1() -> None:
-    """Aho/Sethi/Ullman grammar that exposes an SLR(1) reduce/reduce conflict.
+    """Aho/Sethi/Ullman grammar that exposes the SLR(1) per-item lookahead limitation.
 
     A_nt and B_nt both reduce from a single C token, so they share one LR(0)
     state. FOLLOW(A_nt) == FOLLOW(B_nt) == {D, E}, which makes SLR(1) unable
-    to choose between the two reduce actions. LALR(1) assigns distinct per-item
-    lookaheads ({D} vs {E} in each context) and resolves the conflict.
+    to distinguish the two reduce actions.  SLR(1) resolves ties by definition
+    order (A_nt is earlier), but that is wrong for inputs that require B_nt.
+    LALR(1) computes per-item lookaheads ({D} vs {E}) and handles all inputs.
 
-    Currently xfail: Parser construction raises ParserError under SLR(1).
+    This test uses an input that requires B_nt (A_tok C_tok E_tok →
+    S → A_tok B_nt E_tok).  SLR(1) reduces C_tok to A_nt instead and then
+    fails to parse the E_tok lookahead, demonstrating the limitation.
     """
     # S → A_tok A_nt D_tok | B_tok B_nt D_tok | A_tok B_nt E_tok | B_tok A_nt E_tok
     # A_nt → C_tok
@@ -627,7 +630,7 @@ def test_lalr1_only_aho_grammar_variant_1() -> None:
         [
             A8x("a", lineno=1, offset=0),
             C8x("c", lineno=1, offset=1),
-            D8x("d", lineno=1, offset=2),
+            E8x("e", lineno=1, offset=2),
         ],
     )
     assert isinstance(result, Node8x)
@@ -663,11 +666,13 @@ def test_lalr1_only_aho_grammar_variant_2() -> None:
     """Isomorphic variant of the Aho/Sethi/Ullman grammar with different token names.
 
     X_nt and Y_nt both reduce from a single R token. The conflict structure is
-    identical to variant 1: FOLLOW(X_nt) == FOLLOW(Y_nt) == {S, T} under SLR(1),
-    but LALR(1) per-item lookaheads differ. This second case confirms that the
-    xfail is not an artifact of a particular token ordering.
+    identical to variant 1: FOLLOW(X_nt) == FOLLOW(Y_nt) == {S_tok, T_tok}
+    under SLR(1), but LALR(1) per-item lookaheads differ.  This second case
+    confirms the xfail is not an artifact of a particular token ordering.
 
-    Currently xfail: Parser construction raises ParserError under SLR(1).
+    This test uses an input that requires Y_nt (P_tok R_tok T_tok →
+    S2 → P_tok Y_nt T_tok).  SLR(1) reduces R_tok to X_nt instead and then
+    fails to parse the T_tok lookahead, demonstrating the limitation.
     """
     # S2 → P X_nt S | Q Y_nt S | P Y_nt T | Q X_nt T
     # X_nt → R
@@ -689,7 +694,7 @@ def test_lalr1_only_aho_grammar_variant_2() -> None:
         [
             P8y("p", lineno=1, offset=0),
             R8y("r", lineno=1, offset=1),
-            S8y("s", lineno=1, offset=2),
+            T8y("t", lineno=1, offset=2),
         ],
     )
     assert isinstance(result, Node8y)

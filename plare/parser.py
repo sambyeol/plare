@@ -882,11 +882,10 @@ class Parser[T]:
         #     precedence than the lookahead token, or equal precedence with
         #     left associativity.
         #   Reduce/Reduce: prefer the higher-precedence production; when
-        #     precedences are equal and both reductions have the same LHS,
-        #     the earlier-defined alternative wins (yacc/bison convention).
-        #     Cross-LHS equal-precedence R/R still raises ParserError because
-        #     it indicates an SLR(1) over-approximation that only LALR(1) (T6)
-        #     can resolve correctly.
+        #     precedences are equal, the earlier-defined production wins
+        #     (yacc/bison convention).  This may resolve conflicts that LALR(1)
+        #     would handle correctly via per-item lookaheads, but for those
+        #     grammars the SLR(1) choice may still be wrong for some inputs.
         for state in state_list:
             for item in state.items:
                 if item.next is None:
@@ -933,15 +932,10 @@ class Parser[T]:
                                         state.id, symbol, reduce_action
                                     )
                                 elif item.precedence == e.precedence:
-                                    if item.left == e.left:
-                                        if item.definition_index < e.definition_index:
-                                            self.table.force_update(
-                                                state.id, symbol, reduce_action
-                                            )
-                                    else:
-                                        raise ParserError(
-                                            f"Reduce-Reduce conflict in state {state.id}: {e.left} vs {item.left}"
-                                        ) from None
+                                    if item.definition_index < e.definition_index:
+                                        self.table.force_update(
+                                            state.id, symbol, reduce_action
+                                        )
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:
