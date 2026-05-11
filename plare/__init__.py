@@ -13,4 +13,4 @@ See ``examples/calc/calc.py`` and ``examples/sum_of_list/sum.py`` for
 end-to-end usage examples.
 """
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
