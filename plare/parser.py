@@ -399,7 +399,7 @@ class Rule[T]:
     """
 
     left: str
-    rights: list[tuple[list[Symbol], Maker[T], int | None]]
+    rights: list[tuple[list[Symbol], Maker[T]] | tuple[list[Symbol], Maker[T], int]]
     first: set[type[Token]]
     follow: set[type[Token]]
 
@@ -409,14 +409,18 @@ class Rule[T]:
         rights: list[tuple[list[Symbol], type[T] | None, list[int], int | None]],
     ) -> None:
         self.left = left
-        self.rights = [
-            (
-                right,
-                TMaker(action, args) if action is not None else IDMaker(*args),
-                prec_override,
+        built: list[
+            tuple[list[Symbol], Maker[T]] | tuple[list[Symbol], Maker[T], int]
+        ] = []
+        for right, action, args, prec_override in rights:
+            maker: Maker[T] = (
+                TMaker(action, args) if action is not None else IDMaker(*args)
             )
-            for right, action, args, prec_override in rights
-        ]
+            if prec_override is not None:
+                built.append((right, maker, prec_override))
+            else:
+                built.append((right, maker))
+        self.rights = built
         self.first_built = False
         self.follow_built = False
 
@@ -465,10 +469,12 @@ class Rule[T]:
     @property
     def items(self) -> set[Item[T]]:
         """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
-        return set(
-            Item(self.left, right, maker, prec_override=prec_override)
-            for right, maker, prec_override in self.rights
-        )
+        result: set[Item[T]] = set()
+        for entry in self.rights:
+            right, maker = entry[0], entry[1]
+            prec_override = entry[2] if len(entry) == 3 else None
+            result.add(Item(self.left, right, maker, prec_override=prec_override))
+        return result
 
 
 def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token]]]:
@@ -489,7 +495,7 @@ def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token
     while changed:
         changed = False
         for name, rule in rules.items():
-            for right, _, _prec in rule.rights:
+            for right, *_ in rule.rights:
                 if not right:
                     if EPSILON not in first[name]:
                         first[name].add(EPSILON)
@@ -542,7 +548,7 @@ def compute_follow_sets[T](
     while changed:
         changed = False
         for lhs, rule in rules.items():
-            for right, _, _prec in rule.rights:
+            for right, *_ in rule.rights:
                 for i, sym in enumerate(right):
                     if not isinstance(sym, str):
                         continue
@@ -777,7 +783,7 @@ class Parser[T]:
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()
         for rule in rules.values():
-            for right, _, _prec in rule.rights:
+            for right, *_ in rule.rights:
                 all_tokens.update(t for t in right if isinstance(t, type))
 
         # ── Phase 4: Build LR(0) canonical collection ────────────────────────
