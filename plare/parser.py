@@ -433,7 +433,7 @@ class Rule[T]:
         self,
         left: str,
         rights: list[tuple[list[Symbol], type[T] | None, list[int], int | None]],
-        definition_indices: list[int] | None = None,
+        start_index: int,
     ) -> None:
         self.left = left
         self.rights = [
@@ -444,11 +444,7 @@ class Rule[T]:
             )
             for right, action, args, prec_override in rights
         ]
-        self.definition_indices = (
-            definition_indices
-            if definition_indices is not None
-            else list(range(len(rights)))
-        )
+        self.definition_indices = list(range(start_index, start_index + len(rights)))
         self.first_built = False
         self.follow_built = False
 
@@ -781,16 +777,10 @@ class Parser[T]:
                 else:
                     right, action, args = entry
                     norm_rights.append((right, action, args, None))
-            rules[left] = Rule[T](
-                left,
-                norm_rights,
-                definition_indices=list(
-                    range(global_idx, global_idx + len(norm_rights))
-                ),
-            )
+            rules[left] = Rule[T](left, norm_rights, global_idx)
             start_var = StartVariable(left)
             start_variables.add(start_var)
-            rules[start_var] = Rule[T](start_var, [([left], None, [0], None)])
+            rules[start_var] = Rule[T](start_var, [([left], None, [0], None)], 0)
             global_idx += len(norm_rights)
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
