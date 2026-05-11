@@ -115,12 +115,10 @@ class Item[T]:
     indicating how much of the RHS has been recognised so far.  Items are the
     building blocks of LR automaton states.
 
-    The ``precedence`` attribute is computed at construction time as the
-    precedence of the *first* terminal in ``right`` with a non-zero precedence
-    value (positive terminals take priority over negative ones).  This is used
-    for shift/reduce conflict resolution.  NOTE: per the T5 spec this will be
-    changed to the *last* terminal — the current behaviour matches yacc/bison
-    only for simple grammars.
+    ``precedence`` is used for shift/reduce conflict resolution.  By default it
+    is the precedence of the *rightmost* terminal in ``right`` with a non-zero
+    precedence value (yacc/bison convention).  When ``prec_override`` is given
+    (analogous to yacc's ``%prec``), it replaces that derivation entirely.
 
     Attributes:
         left: The non-terminal on the LHS of the rule.
@@ -144,17 +142,21 @@ class Item[T]:
         right: list[Symbol],
         maker: Maker[T],
         loc: int = 0,
+        prec_override: int | None = None,
     ) -> None:
         self.left = left
         self.right = right
         self.loc = loc
         self.maker = maker
-        self.precedence = 0
-        terminals = [t for t in right if isinstance(t, type)]
-        for token in reversed(terminals):
-            if token.precedence != 0:
-                self.precedence = token.precedence
-                break
+        if prec_override is not None:
+            self.precedence = prec_override
+        else:
+            self.precedence = 0
+            terminals = [t for t in right if isinstance(t, type)]
+            for token in reversed(terminals):
+                if token.precedence != 0:
+                    self.precedence = token.precedence
+                    break
 
     @property
     def next(self) -> Symbol | None:
@@ -170,6 +172,7 @@ class Item[T]:
                 self.right,
                 self.maker,
                 self.loc + 1,
+                prec_override=self.precedence,
             )
         return None
 
@@ -396,19 +399,23 @@ class Rule[T]:
     """
 
     left: str
-    rights: list[tuple[list[Symbol], Maker[T]]]
+    rights: list[tuple[list[Symbol], Maker[T], int | None]]
     first: set[type[Token]]
     follow: set[type[Token]]
 
     def __init__(
         self,
         left: str,
-        rights: list[tuple[list[Symbol], type[T] | None, list[int]]],
+        rights: list[tuple[list[Symbol], type[T] | None, list[int], int | None]],
     ) -> None:
         self.left = left
         self.rights = [
-            (right, TMaker(action, args) if action is not None else IDMaker(*args))
-            for right, action, args in rights
+            (
+                right,
+                TMaker(action, args) if action is not None else IDMaker(*args),
+                prec_override,
+            )
+            for right, action, args, prec_override in rights
         ]
         self.first_built = False
         self.follow_built = False
@@ -458,7 +465,10 @@ class Rule[T]:
     @property
     def items(self) -> set[Item[T]]:
         """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
-        return set(Item(self.left, right, maker) for right, maker in self.rights)
+        return set(
+            Item(self.left, right, maker, prec_override=prec_override)
+            for right, maker, prec_override in self.rights
+        )
 
 
 def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token]]]:
@@ -479,7 +489,7 @@ def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token
     while changed:
         changed = False
         for name, rule in rules.items():
-            for right, _ in rule.rights:
+            for right, _, _ in rule.rights:
                 if not right:
                     if EPSILON not in first[name]:
                         first[name].add(EPSILON)
@@ -532,7 +542,7 @@ def compute_follow_sets[T](
     while changed:
         changed = False
         for lhs, rule in rules.items():
-            for right, _ in rule.rights:
+            for right, _, _ in rule.rights:
                 for i, sym in enumerate(right):
                     if not isinstance(sym, str):
                         continue
@@ -698,7 +708,10 @@ class Parser[T]:
         self,
         grammar: dict[
             str,
-            list[tuple[list[type[Token] | str], type[T] | None, list[int]]],
+            list[
+                tuple[list[type[Token] | str], type[T] | None, list[int]]
+                | tuple[list[type[Token] | str], type[T] | None, list[int], type[Token]]
+            ],
         ],
     ) -> None:
         # ── Phase 1: Augment grammar ─────────────────────────────────────────
@@ -707,13 +720,38 @@ class Parser[T]:
         # so the parser has a distinguished start state per entry point.
         # Using StartVariable ensures these rules are never confused with
         # user-defined rules, even if a user names a rule identically.
+        #
+        # Resolve the optional 4th element (prec_token) in each grammar tuple.
+        # A 3-tuple (right, action, args) is passed through unchanged; a 4-tuple
+        # (right, action, args, prec_token) is rewritten to
+        # (right, action, args, prec_token.precedence) so Rule.__init__ receives
+        # a plain int override rather than a token class.
+        normalized: dict[
+            str,
+            list[tuple[list[type[Token] | str], type[T] | None, list[int], int | None]],
+        ] = {}
+        for left, rights in grammar.items():
+            norm_rights: list[
+                tuple[list[type[Token] | str], type[T] | None, list[int], int | None]
+            ] = []
+            for entry in rights:
+                if len(entry) == 4:
+                    right, action, args, prec_token = entry
+                    norm_rights.append((right, action, args, prec_token.precedence))
+                else:
+                    right, action, args = entry
+                    norm_rights.append((right, action, args, None))
+            normalized[left] = norm_rights
+
         entry_rules = {
-            StartVariable(left): Rule[T](StartVariable(left), [([left], None, [0])])
+            StartVariable(left): Rule[T](
+                StartVariable(left), [([left], None, [0], None)]
+            )
             for left in grammar.keys()
         }
         start_variables = set(entry_rules.keys())
 
-        rules = {left: Rule[T](left, rights) for left, rights in grammar.items()}
+        rules = {left: Rule[T](left, rights) for left, rights in normalized.items()}
         rules |= entry_rules
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
@@ -739,7 +777,7 @@ class Parser[T]:
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()
         for rule in rules.values():
-            for right, _ in rule.rights:
+            for right, _, _ in rule.rights:
                 all_tokens.update(t for t in right if isinstance(t, type))
 
         # ── Phase 4: Build LR(0) canonical collection ────────────────────────
