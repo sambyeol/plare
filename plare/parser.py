@@ -149,10 +149,9 @@ class Item[T]:
         left: str | StartVariable,
         right: list[Symbol],
         maker: Maker[T],
+        definition_index: int,
         loc: int = 0,
         prec_override: int | None = None,
-        *,
-        definition_index: int,
     ) -> None:
         self.left = left
         self.right = right
@@ -182,9 +181,9 @@ class Item[T]:
                 self.left,
                 self.right,
                 self.maker,
+                self.definition_index,
                 self.loc + 1,
-                prec_override=self.precedence,
-                definition_index=self.definition_index,
+                self.precedence,
             )
         return None
 
@@ -494,13 +493,7 @@ class Rule[T]:
     def items(self) -> set[Item[T]]:
         """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
         return set(
-            Item(
-                self.left,
-                right,
-                maker,
-                prec_override=prec_override,
-                definition_index=idx,
-            )
+            Item(self.left, right, maker, idx, prec_override=prec_override)
             for (right, maker, prec_override), idx in zip(
                 self.rights, self.definition_indices
             )
