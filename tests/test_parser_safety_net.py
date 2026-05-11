@@ -13,7 +13,10 @@ from plare.exception import ParsingError
 from plare.parser import Parser
 from plare.token import Token
 
-type GrammarRules[T] = tuple[list[type[Token] | str], type[T] | None, list[int]]
+type GrammarRules[T] = (
+    tuple[list[type[Token] | str], type[T] | None, list[int]]
+    | tuple[list[type[Token] | str], type[T] | None, list[int], type[Token]]
+)
 
 # ---------------------------------------------------------------------------
 # ε-productions

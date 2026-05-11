@@ -16,6 +16,14 @@ import pytest
 from plare.parser import Parser
 from plare.token import Token
 
+type Grammar = dict[
+    str,
+    list[
+        tuple[list[type[Token] | str], type | None, list[int]]
+        | tuple[list[type[Token] | str], type | None, list[int], type[Token]]
+    ],
+]
+
 # ---------------------------------------------------------------------------
 # Shared token and AST types for a multi-state expression grammar
 # ---------------------------------------------------------------------------
@@ -60,9 +68,7 @@ class Mul:
         self.right = right
 
 
-def make_expr_grammar() -> (
-    dict[str, list[tuple[list[type[Token] | str], type | None, list[int]]]]
-):
+def make_expr_grammar() -> Grammar:
     """Return a classic expression grammar with enough states to be meaningful.
 
     expr → expr PLUS term | term
@@ -128,7 +134,7 @@ def test_parser_table_actions_are_deterministic() -> None:
 
 def make_chain_grammar(
     depth: int,
-) -> dict[str, list[tuple[list[type[Token] | str], type | None, list[int]]]]:
+) -> Grammar:
     """Return a right-recursive chain grammar with ``depth`` levels.
 
     Each level i has a unique token class ChainTok_i so the grammar produces
@@ -143,9 +149,7 @@ def make_chain_grammar(
         def __init__(self, *args: object) -> None:
             pass
 
-    grammar: dict[str, list[tuple[list[type[Token] | str], type | None, list[int]]]] = (
-        {}
-    )
+    grammar: Grammar = {}
     for i in range(depth):
         tok = token_classes[i]
         next_nt = f"level_{i + 1}"
