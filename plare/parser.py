@@ -757,7 +757,7 @@ class Parser[T]:
         # definition_index (global counter) so equal-precedence R/R conflicts
         # can be resolved by definition order.
         rules: dict[str, Rule[T]] = {}
-        start_variables: set[StartVariable] = set()
+        entry_rules: list[tuple[StartVariable, Rule[T]]] = []
         global_idx = 0
         for left, productions in grammar.items():
             norm_rights: list[
@@ -772,9 +772,11 @@ class Parser[T]:
                     norm_rights.append((right, action, args, None))
             rules[left] = Rule[T](left, norm_rights, global_idx)
             start_var = StartVariable(left)
-            start_variables.add(start_var)
-            rules[start_var] = Rule[T](start_var, [([left], None, [0], None)], 0)
+            augmented = Rule[T](start_var, [([left], None, [0], None)], 0)
+            rules[start_var] = augmented
+            entry_rules.append((start_var, augmented))
             global_idx += len(norm_rights)
+        start_variables = {sv for sv, _ in entry_rules}
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
@@ -815,9 +817,7 @@ class Parser[T]:
 
         self.entry_state = {}
         bfs: deque[State[T]] = deque()
-        for i, (left, rule) in enumerate(
-            (k, v) for k, v in rules.items() if isinstance(k, StartVariable)
-        ):
+        for i, (left, rule) in enumerate(entry_rules):
             self.entry_state[left.orig] = i
             init_state, _ = intern_state(
                 closure(rule.items, all_items), state_index, state_list
