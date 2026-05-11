@@ -128,9 +128,6 @@ class Item[T]:
         maker: The semantic action to invoke on reduction.
         precedence: Effective precedence of this production for conflict
             resolution; ``0`` means no precedence.
-        prec_override: When not ``None``, this value was supplied explicitly
-            via a ``prec_token`` in the grammar tuple and overrides the
-            terminal-scan precedence.
     """
 
     left: str | StartVariable
@@ -138,7 +135,6 @@ class Item[T]:
     loc: int
     maker: Maker[T]
     precedence: int
-    prec_override: int | None
 
     def __init__(
         self,
@@ -152,7 +148,6 @@ class Item[T]:
         self.right = right
         self.loc = loc
         self.maker = maker
-        self.prec_override = prec_override
         if prec_override is not None:
             self.precedence = prec_override
         else:
@@ -177,7 +172,7 @@ class Item[T]:
                 self.right,
                 self.maker,
                 self.loc + 1,
-                prec_override=self.prec_override,
+                prec_override=self.precedence,
             )
         return None
 
