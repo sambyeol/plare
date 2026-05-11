@@ -496,7 +496,7 @@ def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token
     while changed:
         changed = False
         for name, rule in rules.items():
-            for right, _, _prec in rule.rights:
+            for right, _, _ in rule.rights:
                 if not right:
                     if EPSILON not in first[name]:
                         first[name].add(EPSILON)
@@ -549,7 +549,7 @@ def compute_follow_sets[T](
     while changed:
         changed = False
         for lhs, rule in rules.items():
-            for right, _, _prec in rule.rights:
+            for right, _, _ in rule.rights:
                 for i, sym in enumerate(right):
                     if not isinstance(sym, str):
                         continue
@@ -785,7 +785,7 @@ class Parser[T]:
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()
         for rule in rules.values():
-            for right, _, _prec in rule.rights:
+            for right, _, _ in rule.rights:
                 all_tokens.update(t for t in right if isinstance(t, type))
 
         # ── Phase 4: Build LR(0) canonical collection ────────────────────────
