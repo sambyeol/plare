@@ -758,6 +758,7 @@ class Parser[T]:
         # can be resolved by definition order.
         rules: dict[str, Rule[T]] = {}
         entry_rules: list[tuple[StartVariable, Rule[T]]] = []
+        start_variables: set[StartVariable] = set()
         global_idx = 0
         for left, productions in grammar.items():
             norm_rights: list[
@@ -775,8 +776,8 @@ class Parser[T]:
             augmented = Rule[T](start_var, [([left], None, [0], None)], 0)
             rules[start_var] = augmented
             entry_rules.append((start_var, augmented))
+            start_variables.add(start_var)
             global_idx += len(norm_rights)
-        start_variables = {sv for sv, _ in entry_rules}
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
