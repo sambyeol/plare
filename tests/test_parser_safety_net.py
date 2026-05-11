@@ -562,12 +562,25 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
 
 
 # ---------------------------------------------------------------------------
-# LALR(1)-only grammars (Aho/Sethi/Ullman reduce/reduce conflicts)
+# LALR(1)-resolvable grammars — FOLLOW-set inflation creates a spurious R/R
+# conflict in SLR(1) that LALR(1) per-item lookaheads cleanly resolve.
 #
-# Two distinct non-terminals (A_nt / B_nt, X_nt / Y_nt) share the same
-# single-token body.  Their LR(0) reduce states are merged, and
-# FOLLOW(A_nt) == FOLLOW(B_nt), so SLR(1) cannot resolve the R/R conflict.
-# LALR(1) computes per-item lookaheads that differ, resolving the conflict.
+# Two non-terminals (A_nt/B_nt, X_nt/Y_nt) share the same single-token body
+# and land in the same LR(0) reduce state.  One of them also appears in an
+# *unrelated* production that inflates its FOLLOW set so that it overlaps the
+# other's FOLLOW set — but only in states where the two items do NOT coexist.
+#
+# Key distinction from the Aho/Sethi/Ullman (LR(1)-only) grammar:
+#   In the Aho grammar both non-terminals appear symmetrically in four
+#   productions, so every LR(1) state that holds {A_nt → C •, B_nt → C •}
+#   comes in two mirror images whose lookaheads cross-contaminate when merged
+#   in LALR(1), creating a new R/R conflict not present in LR(1).
+#
+#   Here, the extra production that inflates FOLLOW(A_nt) produces a *separate*
+#   LR(0) state (core {A_nt → E •} only, no B_nt) that is never merged with
+#   the conflict state (core {A_nt → E •, B_nt → E •}).  LALR(1) lookaheads
+#   in the conflict state remain {B8x} vs {C8x, D8x} — disjoint — so no
+#   new conflict is introduced by merging.
 # ---------------------------------------------------------------------------
 
 
@@ -592,45 +605,50 @@ class E8x(Token):
 
 
 class Node8x:
-    def __init__(self, *args: Token) -> None:
+    def __init__(self, *args: object) -> None:
         pass
 
 
 @pytest.mark.xfail(strict=True, reason="requires LALR(1)")
-def test_lalr1_only_aho_grammar_variant_1() -> None:
-    """Aho/Sethi/Ullman grammar that exposes the SLR(1) per-item lookahead limitation.
+def test_lalr1_rr_conflict_follow_inflation_variant_1() -> None:
+    """FOLLOW-set inflation creates a spurious SLR(1) R/R conflict.
 
-    A_nt and B_nt both reduce from a single C token, so they share one LR(0)
-    state. FOLLOW(A_nt) == FOLLOW(B_nt) == {D, E}, which makes SLR(1) unable
-    to distinguish the two reduce actions.  SLR(1) resolves ties by definition
-    order (A_nt is earlier), but that is wrong for inputs that require B_nt.
-    LALR(1) computes per-item lookaheads ({D} vs {E}) and handles all inputs.
+    Grammar:
+      start → A8x A_nt B8x | A8x B_nt C8x | A8x B_nt D8x | A_nt C8x
+      A_nt  → E8x
+      B_nt  → E8x
 
-    This test uses an input that requires B_nt (A_tok C_tok E_tok →
-    S → A_tok B_nt E_tok).  SLR(1) reduces C_tok to A_nt instead and then
-    fails to parse the E_tok lookahead, demonstrating the limitation.
+    The state reached after [A8x, E8x] contains {A_nt → E8x •, B_nt → E8x •}.
+    FOLLOW(A_nt) = {B8x, C8x}  (from "A8x A_nt B8x" and "A_nt C8x")
+    FOLLOW(B_nt) = {C8x, D8x}  (from "A8x B_nt C8x" and "A8x B_nt D8x")
+    Intersection {C8x} creates a spurious SLR(1) R/R conflict; definition order
+    picks A_nt.  Parsing [A8x, E8x, C8x] therefore fails: SLR(1) reduces E8x
+    to A_nt, then rejects C8x (expected B8x).
+
+    LALR(1) per-item lookaheads in that state are {B8x} for A_nt and
+    {C8x, D8x} for B_nt — disjoint — so C8x correctly triggers B_nt and the
+    parse succeeds.  The inflation token C8x only appears as a lookahead in a
+    separate LR(0) state (core {A_nt → E8x •} alone), which is never merged
+    with the conflict state, so LALR(1) is sufficient.
     """
-    # S → A_tok A_nt D_tok | B_tok B_nt D_tok | A_tok B_nt E_tok | B_tok A_nt E_tok
-    # A_nt → C_tok
-    # B_nt → C_tok
     p = Parser(
         {
-            "S": [
-                ([A8x, "A_nt", D8x], Node8x, [0, 1, 2]),
-                ([B8x, "B_nt", D8x], Node8x, [0, 1, 2]),
-                ([A8x, "B_nt", E8x], Node8x, [0, 1, 2]),
-                ([B8x, "A_nt", E8x], Node8x, [0, 1, 2]),
+            "start": [
+                ([A8x, "A_nt", B8x], Node8x, [0, 1, 2]),
+                ([A8x, "B_nt", C8x], Node8x, [0, 1, 2]),
+                ([A8x, "B_nt", D8x], Node8x, [0, 1, 2]),
+                (["A_nt", C8x], Node8x, [0, 1]),
             ],
-            "A_nt": [([C8x], None, [0])],
-            "B_nt": [([C8x], None, [0])],
+            "A_nt": [([E8x], None, [0])],
+            "B_nt": [([E8x], None, [0])],
         }
     )
     result = p.parse(
-        "S",
+        "start",
         [
             A8x("a", lineno=1, offset=0),
-            C8x("c", lineno=1, offset=1),
-            E8x("e", lineno=1, offset=2),
+            E8x("e", lineno=1, offset=1),
+            C8x("c", lineno=1, offset=2),
         ],
     )
     assert isinstance(result, Node8x)
@@ -657,44 +675,45 @@ class T8y(Token):
 
 
 class Node8y:
-    def __init__(self, *args: Token) -> None:
+    def __init__(self, *args: object) -> None:
         pass
 
 
 @pytest.mark.xfail(strict=True, reason="requires LALR(1)")
-def test_lalr1_only_aho_grammar_variant_2() -> None:
-    """Isomorphic variant of the Aho/Sethi/Ullman grammar with different token names.
+def test_lalr1_rr_conflict_follow_inflation_variant_2() -> None:
+    """Isomorphic variant confirming the result is independent of token naming.
 
-    X_nt and Y_nt both reduce from a single R token. The conflict structure is
-    identical to variant 1: FOLLOW(X_nt) == FOLLOW(Y_nt) == {S_tok, T_tok}
-    under SLR(1), but LALR(1) per-item lookaheads differ.  This second case
-    confirms the xfail is not an artifact of a particular token ordering.
+    Grammar:
+      start2 → P8y X_nt Q8y | P8y Y_nt R8y | P8y Y_nt S8y | X_nt R8y
+      X_nt  → T8y
+      Y_nt  → T8y
 
-    This test uses an input that requires Y_nt (P_tok R_tok T_tok →
-    S2 → P_tok Y_nt T_tok).  SLR(1) reduces R_tok to X_nt instead and then
-    fails to parse the T_tok lookahead, demonstrating the limitation.
+    FOLLOW(X_nt) = {Q8y, R8y}  (from "P8y X_nt Q8y" and "X_nt R8y")
+    FOLLOW(Y_nt) = {R8y, S8y}  (from "P8y Y_nt R8y" and "P8y Y_nt S8y")
+    Intersection {R8y}: spurious SLR(1) R/R; X_nt wins by definition order.
+    Parsing [P8y, T8y, R8y] fails: SLR(1) reduces T8y to X_nt, then rejects
+    R8y (expected Q8y).
+    LALR(1) per-item lookaheads after [P8y, T8y]: X_nt → {Q8y}, Y_nt →
+    {R8y, S8y} — disjoint — so R8y correctly triggers Y_nt.
     """
-    # S2 → P X_nt S | Q Y_nt S | P Y_nt T | Q X_nt T
-    # X_nt → R
-    # Y_nt → R
     p = Parser(
         {
-            "S2": [
-                ([P8y, "X_nt", S8y], Node8y, [0, 1, 2]),
-                ([Q8y, "Y_nt", S8y], Node8y, [0, 1, 2]),
-                ([P8y, "Y_nt", T8y], Node8y, [0, 1, 2]),
-                ([Q8y, "X_nt", T8y], Node8y, [0, 1, 2]),
+            "start2": [
+                ([P8y, "X_nt", Q8y], Node8y, [0, 1, 2]),
+                ([P8y, "Y_nt", R8y], Node8y, [0, 1, 2]),
+                ([P8y, "Y_nt", S8y], Node8y, [0, 1, 2]),
+                (["X_nt", R8y], Node8y, [0, 1]),
             ],
-            "X_nt": [([R8y], None, [0])],
-            "Y_nt": [([R8y], None, [0])],
+            "X_nt": [([T8y], None, [0])],
+            "Y_nt": [([T8y], None, [0])],
         }
     )
     result = p.parse(
-        "S2",
+        "start2",
         [
             P8y("p", lineno=1, offset=0),
-            R8y("r", lineno=1, offset=1),
-            T8y("t", lineno=1, offset=2),
+            T8y("t", lineno=1, offset=1),
+            R8y("r", lineno=1, offset=2),
         ],
     )
     assert isinstance(result, Node8y)
