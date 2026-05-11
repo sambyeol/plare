@@ -151,15 +151,10 @@ class Item[T]:
         self.maker = maker
         self.precedence = 0
         terminals = [t for t in right if isinstance(t, type)]
-        for token in terminals:
-            if token.precedence > 0:
+        for token in reversed(terminals):
+            if token.precedence != 0:
                 self.precedence = token.precedence
                 break
-        else:
-            for token in terminals:
-                if token.precedence < 0:
-                    self.precedence = token.precedence
-                    break
 
     @property
     def next(self) -> Symbol | None:
