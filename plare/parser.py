@@ -151,7 +151,8 @@ class Item[T]:
         maker: Maker[T],
         loc: int = 0,
         prec_override: int | None = None,
-        definition_index: int = 0,
+        *,
+        definition_index: int,
     ) -> None:
         self.left = left
         self.right = right
@@ -271,7 +272,7 @@ class Reduce[T]:
         n: int,
         maker: Maker[T],
         precedence: int,
-        definition_index: int = 0,
+        definition_index: int,
     ) -> None:
         self.left = left
         self.n = n
