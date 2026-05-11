@@ -406,23 +406,16 @@ class Rule[T]:
     def __init__(
         self,
         left: str,
-        rights: list[
-            tuple[list[Symbol], type[T] | None, list[int]]
-            | tuple[list[Symbol], type[T] | None, list[int], int]
-        ],
+        rights: list[tuple[list[Symbol], type[T] | None, list[int], int | None]],
     ) -> None:
         self.left = left
         self.rights = [
             (
-                entry[0],
-                (
-                    TMaker(entry[1], entry[2])
-                    if entry[1] is not None
-                    else IDMaker(*entry[2])
-                ),
-                entry[3] if len(entry) == 4 else None,
+                right,
+                TMaker(action, args) if action is not None else IDMaker(*args),
+                prec_override,
             )
-            for entry in rights
+            for right, action, args, prec_override in rights
         ]
         self.first_built = False
         self.follow_built = False
@@ -735,26 +728,25 @@ class Parser[T]:
         # a plain int override rather than a token class.
         normalized: dict[
             str,
-            list[
-                tuple[list[type[Token] | str], type[T] | None, list[int]]
-                | tuple[list[type[Token] | str], type[T] | None, list[int], int]
-            ],
+            list[tuple[list[type[Token] | str], type[T] | None, list[int], int | None]],
         ] = {}
         for left, rights in grammar.items():
             norm_rights: list[
-                tuple[list[type[Token] | str], type[T] | None, list[int]]
-                | tuple[list[type[Token] | str], type[T] | None, list[int], int]
+                tuple[list[type[Token] | str], type[T] | None, list[int], int | None]
             ] = []
             for entry in rights:
                 if len(entry) == 4:
                     right, action, args, prec_token = entry
                     norm_rights.append((right, action, args, prec_token.precedence))
                 else:
-                    norm_rights.append(entry)
+                    right, action, args = entry
+                    norm_rights.append((right, action, args, None))
             normalized[left] = norm_rights
 
         entry_rules = {
-            StartVariable(left): Rule[T](StartVariable(left), [([left], None, [0])])
+            StartVariable(left): Rule[T](
+                StartVariable(left), [([left], None, [0], None)]
+            )
             for left in grammar.keys()
         }
         start_variables = set(entry_rules.keys())

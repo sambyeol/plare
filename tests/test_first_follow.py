@@ -97,7 +97,7 @@ class RParen(Token):
 
 def make_rule(left: str, rights: list[list[Symbol]]) -> Rule[Null]:
     """Build a Rule for testing — the makers are stubs never called by the pure functions."""
-    r: Rule[Null] = Rule(left, [(list(rhs), Null, []) for rhs in rights])
+    r: Rule[Null] = Rule(left, [(list(rhs), Null, [], None) for rhs in rights])
     return r
 
 
