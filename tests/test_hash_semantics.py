@@ -19,7 +19,7 @@ class TokB(Token):
 
 
 def make_item(left: str, right: list, loc: int = 0) -> Item[object]:
-    return Item(left, right, IDMaker(0), loc)
+    return Item(left, right, IDMaker(0), 0, loc)
 
 
 def test_item_equal_data_hash_equal() -> None:

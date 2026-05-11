@@ -120,6 +120,11 @@ class Item[T]:
     precedence value (yacc/bison convention).  When ``prec_override`` is given
     (analogous to yacc's ``%prec``), it replaces that derivation entirely.
 
+    ``definition_index`` is the zero-based ordinal assigned to this production
+    during grammar construction (counting across all non-terminals in definition
+    order).  It is used to break ties when two reduce actions have equal
+    precedence: the production with the lower index wins.
+
     Attributes:
         left: The non-terminal on the LHS of the rule.
         right: The full RHS symbol sequence (terminals are ``type[Token]``
@@ -128,6 +133,8 @@ class Item[T]:
         maker: The semantic action to invoke on reduction.
         precedence: Effective precedence of this production for conflict
             resolution; ``0`` means no precedence.
+        definition_index: Grammar-wide ordinal of this production (0 = first
+            defined).
     """
 
     left: str | StartVariable
@@ -135,12 +142,14 @@ class Item[T]:
     loc: int
     maker: Maker[T]
     precedence: int
+    definition_index: int
 
     def __init__(
         self,
         left: str | StartVariable,
         right: list[Symbol],
         maker: Maker[T],
+        definition_index: int,
         loc: int = 0,
         prec_override: int | None = None,
     ) -> None:
@@ -148,6 +157,7 @@ class Item[T]:
         self.right = right
         self.loc = loc
         self.maker = maker
+        self.definition_index = definition_index
         if prec_override is not None:
             self.precedence = prec_override
         else:
@@ -171,8 +181,9 @@ class Item[T]:
                 self.left,
                 self.right,
                 self.maker,
+                self.definition_index,
                 self.loc + 1,
-                prec_override=self.precedence,
+                self.precedence,
             )
         return None
 
@@ -252,12 +263,21 @@ class Reduce[T]:
     n: int
     maker: Maker[T]
     precedence: int
+    definition_index: int
 
-    def __init__(self, left: str, n: int, maker: Maker[T], precedence: int) -> None:
+    def __init__(
+        self,
+        left: str,
+        n: int,
+        maker: Maker[T],
+        precedence: int,
+        definition_index: int,
+    ) -> None:
         self.left = left
         self.n = n
         self.maker = maker
         self.precedence = precedence
+        self.definition_index = definition_index
 
     def __str__(self) -> str:
         return f"Reduce({self.n}, {self.maker})"
@@ -308,11 +328,13 @@ class ReduceReduceConflict(Conflict):
     Args:
         left: LHS of the already-registered reduce action.
         precedence: Precedence of the already-registered reduce action.
+        definition_index: Grammar-wide ordinal of the already-registered production.
     """
 
-    def __init__(self, left: str, precedence: int) -> None:
+    def __init__(self, left: str, precedence: int, definition_index: int) -> None:
         self.left = left
         self.precedence = precedence
+        self.definition_index = definition_index
 
 
 class Table[T]:
@@ -348,7 +370,9 @@ class Table[T]:
                     case Shift(), Reduce():
                         raise ShiftReduceConflict()
                     case Reduce(), Reduce():
-                        raise ReduceReduceConflict(exist.left, exist.precedence)
+                        raise ReduceReduceConflict(
+                            exist.left, exist.precedence, exist.definition_index
+                        )
                     case _:
                         raise ParserError(
                             f"Unknown parser error in state {state}: action for {symbol} is already determined to {exist}, but new action {action} is given"
@@ -400,6 +424,7 @@ class Rule[T]:
 
     left: str
     rights: list[tuple[list[Symbol], Maker[T], int | None]]
+    definition_indices: list[int]
     first: set[type[Token]]
     follow: set[type[Token]]
 
@@ -407,6 +432,7 @@ class Rule[T]:
         self,
         left: str,
         rights: list[tuple[list[Symbol], type[T] | None, list[int], int | None]],
+        start_index: int,
     ) -> None:
         self.left = left
         self.rights = [
@@ -417,6 +443,7 @@ class Rule[T]:
             )
             for right, action, args, prec_override in rights
         ]
+        self.definition_indices = list(range(start_index, start_index + len(rights)))
         self.first_built = False
         self.follow_built = False
 
@@ -466,8 +493,10 @@ class Rule[T]:
     def items(self) -> set[Item[T]]:
         """Initial items ``[A → • rhs]`` for all alternatives of this rule."""
         return set(
-            Item(self.left, right, maker, prec_override=prec_override)
-            for right, maker, prec_override in self.rights
+            Item(self.left, right, maker, idx, prec_override=prec_override)
+            for (right, maker, prec_override), idx in zip(
+                self.rights, self.definition_indices
+            )
         )
 
 
@@ -721,38 +750,34 @@ class Parser[T]:
         # Using StartVariable ensures these rules are never confused with
         # user-defined rules, even if a user names a rule identically.
         #
-        # Resolve the optional 4th element (prec_token) in each grammar tuple.
-        # A 3-tuple (right, action, args) is passed through unchanged; a 4-tuple
+        # A 3-tuple (right, action, args) is accepted unchanged; a 4-tuple
         # (right, action, args, prec_token) is rewritten to
-        # (right, action, args, prec_token.precedence) so Rule.__init__ receives
-        # a plain int override rather than a token class.
-        normalized: dict[
-            str,
-            list[tuple[list[type[Token] | str], type[T] | None, list[int], int | None]],
-        ] = {}
-        for left, rights in grammar.items():
+        # (right, action, args, prec_token.precedence) so Rule receives a plain
+        # int override.  Each production is assigned a grammar-wide
+        # definition_index (global counter) so equal-precedence R/R conflicts
+        # can be resolved by definition order.
+        rules: dict[str, Rule[T]] = {}
+        entry_rules: list[tuple[StartVariable, Rule[T]]] = []
+        start_variables: set[StartVariable] = set()
+        global_idx = 0
+        for left, productions in grammar.items():
             norm_rights: list[
                 tuple[list[type[Token] | str], type[T] | None, list[int], int | None]
             ] = []
-            for entry in rights:
+            for entry in productions:
                 if len(entry) == 4:
                     right, action, args, prec_token = entry
                     norm_rights.append((right, action, args, prec_token.precedence))
                 else:
                     right, action, args = entry
                     norm_rights.append((right, action, args, None))
-            normalized[left] = norm_rights
-
-        entry_rules = {
-            StartVariable(left): Rule[T](
-                StartVariable(left), [([left], None, [0], None)]
-            )
-            for left in grammar.keys()
-        }
-        start_variables = set(entry_rules.keys())
-
-        rules = {left: Rule[T](left, rights) for left, rights in normalized.items()}
-        rules |= entry_rules
+            rules[left] = Rule[T](left, norm_rights, global_idx)
+            start_var = StartVariable(left)
+            augmented = Rule[T](start_var, [([left], None, [0], None)], 0)
+            rules[start_var] = augmented
+            entry_rules.append((start_var, augmented))
+            start_variables.add(start_var)
+            global_idx += len(norm_rights)
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
@@ -793,7 +818,7 @@ class Parser[T]:
 
         self.entry_state = {}
         bfs: deque[State[T]] = deque()
-        for i, (left, rule) in enumerate(entry_rules.items()):
+        for i, (left, rule) in enumerate(entry_rules):
             self.entry_state[left.orig] = i
             init_state, _ = intern_state(
                 closure(rule.items, all_items), state_index, state_list
@@ -833,8 +858,11 @@ class Parser[T]:
         #   Shift/Reduce: prefer shift unless the production has higher
         #     precedence than the lookahead token, or equal precedence with
         #     left associativity.
-        #   Reduce/Reduce: prefer the higher-precedence production; raise
-        #     ParserError when precedences are equal (ambiguous grammar).
+        #   Reduce/Reduce: prefer the higher-precedence production; when
+        #     precedences are equal, the earlier-defined production wins
+        #     (yacc/bison convention).  This may resolve conflicts that LALR(1)
+        #     would handle correctly via per-item lookaheads, but for those
+        #     grammars the SLR(1) choice may still be wrong for some inputs.
         for state in state_list:
             for item in state.items:
                 if item.next is None:
@@ -847,7 +875,11 @@ class Parser[T]:
                     else:
                         for symbol in rules[item.left].follow:
                             reduce_action = Reduce(
-                                item.left, len(item.right), item.maker, item.precedence
+                                item.left,
+                                len(item.right),
+                                item.maker,
+                                item.precedence,
+                                item.definition_index,
                             )
                             try:
                                 self.table[state.id, symbol] = reduce_action
@@ -877,9 +909,10 @@ class Parser[T]:
                                         state.id, symbol, reduce_action
                                     )
                                 elif item.precedence == e.precedence:
-                                    raise ParserError(
-                                        f"Reduce-Reduce conflict in state {state.id}: {e.left} vs {item.left}"
-                                    ) from None
+                                    if item.definition_index < e.definition_index:
+                                        self.table.force_update(
+                                            state.id, symbol, reduce_action
+                                        )
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:
