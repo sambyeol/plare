@@ -1,8 +1,9 @@
-"""Tests for the 4-tuple prec_token grammar extension (yacc-style %prec).
+"""Tests for yacc-style conflict resolution: prec_token override and R/R definition order.
 
-Verifies that a production's effective precedence can be overridden by
-supplying a prec_token as the 4th element of a grammar tuple, and that
-this override changes conflict resolution relative to the 3-tuple form.
+Covers two orthogonal features:
+- 4-tuple prec_token (yacc %prec): override the effective precedence of a production.
+- R/R definition order: when two productions compete with equal precedence, the
+  earlier-defined production wins silently instead of raising ParserError.
 """
 
 from __future__ import annotations
@@ -152,3 +153,48 @@ def test_prec_override_unary_minus_binds_tighter_than_mul() -> None:
         result_without, Neg
     ), f"expected Neg, got {type(result_without).__name__}"
     assert isinstance(result_without.operand, Mul)
+
+
+# ---------------------------------------------------------------------------
+# R/R definition order
+# ---------------------------------------------------------------------------
+
+
+class Lit(Token):
+    """Single literal token with no precedence."""
+
+
+class FirstResult:
+    def __init__(self, tok: Lit) -> None:
+        self.tok = tok
+
+
+class SecondResult:
+    def __init__(self, tok: Lit) -> None:
+        self.tok = tok
+
+
+def test_rr_equal_precedence_first_defined_wins() -> None:
+    """Earlier-defined production wins on equal-precedence R/R conflict.
+
+    Two non-terminals (first_val, second_val) both reduce from a single Lit
+    token with zero precedence, producing an R/R conflict in the merged LR(0)
+    state.  The grammar entry non-terminal can use either.
+
+    Without definition-order tie-breaking, Parser construction would raise
+    ParserError.  With it, first_val (defined earlier, lower definition_index)
+    wins, so the reduction always produces FirstResult.
+    """
+    grammar: dict = {
+        "result": [
+            (["first_val"], FirstResult, [0]),
+            (["second_val"], SecondResult, [0]),
+        ],
+        "first_val": [([Lit], None, [0])],
+        "second_val": [([Lit], None, [0])],
+    }
+    parser = Parser(grammar)
+    result = parser.parse("result", [Lit("x", lineno=1, offset=0)])
+    assert isinstance(
+        result, FirstResult
+    ), f"expected FirstResult (first-defined), got {type(result).__name__}"
