@@ -10,11 +10,10 @@ actually follow A in a specific state.
 Construction pipeline (``Parser.__init__``):
     1. Augment the grammar with ``StartVariable(X) → X`` entry rules.
     2. Compute FIRST sets for every non-terminal.
-    3. Compute FOLLOW sets for every non-terminal (requires FIRST sets).
-    4. Build the LR(0) canonical collection (states + transitions) via
+    3. Build the LR(0) canonical collection (states + transitions) via
        ``closure`` / ``goto`` BFS.
-    5. Compute LALR(1) per-item lookahead sets (ASU §9.6).
-    6. Populate the action/goto table; resolve shift/reduce and reduce/reduce
+    4. Compute LALR(1) per-item lookahead sets (ASU §9.6).
+    5. Populate the action/goto table; resolve shift/reduce and reduce/reduce
        conflicts using token precedence and associativity.
 """
 
@@ -413,13 +412,13 @@ class Table[T]:
         state, symbol = key
         return self.table[state][symbol]
 
-    def force_update(self, state: int, symbol: Symbol, action: Action[T]) -> None:
-        """Overwrite a table entry without conflict checking.
+    def expected_tokens(self, state: int) -> list[type[Token]]:
+        """Return terminal classes that have an action in *state*."""
+        return [sym for sym in self.table[state] if isinstance(sym, type) and issubclass(sym, Token)]
 
-        Used exclusively by ``Parser.__init__`` after it has decided which
-        action wins a conflict.  Must not be called for any other purpose.
-        """
-        self.table[state][symbol] = action
+    def resolve_conflict(self, state: int, symbol: Symbol, winner: Action[T]) -> None:
+        """Overwrite a table entry with the winning action from a resolved conflict."""
+        self.table[state][symbol] = winner
 
 
 class Rule[T]:
@@ -1000,7 +999,7 @@ class Parser[T]:
                                     item.precedence == symbol.precedence
                                     and symbol.associative == "left"
                                 ):
-                                    self.table.force_update(
+                                    self.table.resolve_conflict(
                                         state.id, symbol, reduce_action
                                     )
                             except ReduceReduceConflict as e:
@@ -1011,12 +1010,12 @@ class Parser[T]:
                                     item.left,
                                 )
                                 if item.precedence > e.precedence:
-                                    self.table.force_update(
+                                    self.table.resolve_conflict(
                                         state.id, symbol, reduce_action
                                     )
                                 elif item.precedence == e.precedence:
                                     if item.definition_index < e.definition_index:
-                                        self.table.force_update(
+                                        self.table.resolve_conflict(
                                             state.id, symbol, reduce_action
                                         )
         logger.info("Parser created")
