@@ -441,7 +441,7 @@ class MulUP(ExprUP):
         self.r = r
 
 
-_unary_parser = Parser(
+unary_parser = Parser(
     {
         "expr": [
             ([NUM_UP], NumUP, [0]),
@@ -460,7 +460,7 @@ def test_three_level_unary_tighter_than_mul() -> None:
     prec=0 (MINUS_UP has no precedence), which is lower than STAR's 2, making
     the parser shift STAR and produce Neg(Mul(2, 3)) instead.
     """
-    result = _unary_parser.parse(
+    result = unary_parser.parse(
         "expr",
         [
             MINUS_UP("-", lineno=1, offset=0),
@@ -477,7 +477,7 @@ def test_three_level_unary_tighter_than_mul() -> None:
 
 def test_three_level_unary_with_add() -> None:
     """2 + -3: unary minus (prec=3) on right operand is reduced before add (prec=1)."""
-    result = _unary_parser.parse(
+    result = unary_parser.parse(
         "expr",
         [
             NUM_UP("2", lineno=1, offset=0),
