@@ -1,11 +1,11 @@
-"""SLR(1) parser with operator-precedence conflict resolution.
+"""LALR(1) parser with operator-precedence conflict resolution.
 
-This module implements an **SLR(1)** (Simple LR, 1 token of lookahead) parser.
-The key characteristic of SLR(1) is that reduce actions fire on the full
-FOLLOW set of the reduced non-terminal, rather than on the tighter per-item
-lookahead sets used by LALR(1) or canonical LR(1).  This is an
-over-approximation that can cause spurious conflicts for grammars that LALR(1)
-would accept without conflict.  The LALR(1) upgrade is tracked in T6.
+This module implements an **LALR(1)** (Look-Ahead LR, 1 token of lookahead)
+parser.  Reduce actions fire on per-item lookahead sets computed via the
+spontaneous-generation and propagation algorithm (Aho-Sethi-Ullman §9.6),
+rather than on the global FOLLOW set used by SLR(1).  This eliminates
+spurious conflicts that arise when FOLLOW(A) contains tokens that cannot
+actually follow A in a specific state.
 
 Construction pipeline (``Parser.__init__``):
     1. Augment the grammar with ``StartVariable(X) → X`` entry rules.
@@ -13,7 +13,8 @@ Construction pipeline (``Parser.__init__``):
     3. Compute FOLLOW sets for every non-terminal (requires FIRST sets).
     4. Build the LR(0) canonical collection (states + transitions) via
        ``closure`` / ``goto`` BFS.
-    5. Populate the action/goto table; resolve shift/reduce and reduce/reduce
+    5. Compute LALR(1) per-item lookahead sets (ASU §9.6).
+    6. Populate the action/goto table; resolve shift/reduce and reduce/reduce
        conflicts using token precedence and associativity.
 """
 
@@ -34,6 +35,10 @@ class EOS(Token):
 
 class EPSILON(Token):
     """Sentinel token representing the empty string (ε) in FIRST sets."""
+
+
+class DUMMY_LOOKAHEAD(Token):
+    """Sentinel lookahead used during LALR(1) spontaneous-generation detection."""
 
 
 type Symbol = type[Token] | str
@@ -221,14 +226,20 @@ class State[T]:
     Attributes:
         id: Index used to look up rows in the ``Table``.
         items: The closed set of LR(0) items that define this state.
+        lookaheads: LALR(1) lookahead sets keyed by item.  For each complete
+            item ``[A → α •]`` in this state, ``lookaheads[item]`` is the set
+            of tokens on which the reduction fires.  Populated during Phase 5
+            of ``Parser.__init__``.
     """
 
     id: int
     items: set[Item[T]]
+    lookaheads: dict[Item[T], set[type[Token]]]
 
     def __init__(self, id: int, items: set[Item[T]]) -> None:
         self.id = id
         self.items = items
+        self.lookaheads = {}
 
     def __hash__(self) -> int:
         return hash(frozenset(self.items))
@@ -701,8 +712,184 @@ def intern_state[T](
     return state, True
 
 
+def first_of_sequence[T](
+    syms: list[Symbol],
+    lookahead: type[Token],
+    first_sets: dict[str, set[type[Token]]],
+) -> set[type[Token]]:
+    """Return the set of tokens that can begin the sequence ``syms lookahead``.
+
+    Computes FIRST(syms) and, if every symbol in ``syms`` is nullable (or
+    ``syms`` is empty), includes ``lookahead``.  Used by ``closure_lr1`` to
+    derive the lookahead set for newly added LR(1) items.
+
+    Args:
+        syms: Suffix of a production RHS (β in ``[A → α • B β, a]``).
+        lookahead: The inherited lookahead ``a`` to include when ``syms``
+            derives ε.
+        first_sets: Precomputed FIRST sets from ``compute_first_sets``.
+
+    Returns:
+        The set of token classes that can begin ``syms`` followed by
+        ``lookahead``.
+    """
+    result: set[type[Token]] = set()
+    for sym in syms:
+        if isinstance(sym, type):
+            result.add(sym)
+            return result
+        sym_first = first_sets[sym]
+        result.update(sym_first - {EPSILON})
+        if EPSILON not in sym_first:
+            return result
+    result.add(lookahead)
+    return result
+
+
+def closure_lr1[T](
+    lr1_kernel: set[tuple[Item[T], type[Token]]],
+    all_items: dict[str, set[Item[T]]],
+    first_sets: dict[str, set[type[Token]]],
+) -> set[tuple[Item[T], type[Token]]]:
+    """Compute the LR(1) closure of a set of LR(1) items.
+
+    Each LR(1) item is a pair ``(item, lookahead)``.  For every item
+    ``[A → α • B β, a]`` in the set, adds ``[B → • γ, b]`` for every
+    production ``B → γ`` and every ``b ∈ first_of_sequence(β, a, first_sets)``.
+    Repeats until no new items are added (ASU §9.5).
+
+    Args:
+        lr1_kernel: Seed LR(1) items as ``(Item, lookahead-token-class)`` pairs.
+        all_items: Mapping from non-terminal name to its initial LR(0) items.
+        first_sets: Precomputed FIRST sets from ``compute_first_sets``.
+
+    Returns:
+        The closed set of LR(1) items (superset of ``lr1_kernel``).
+    """
+    result: set[tuple[Item[T], type[Token]]] = set(lr1_kernel)
+    worklist: deque[tuple[Item[T], type[Token]]] = deque(lr1_kernel)
+    while worklist:
+        item, lookahead = worklist.popleft()
+        next_sym = item.next
+        if next_sym is None or isinstance(next_sym, type):
+            continue
+        beta = item.right[item.loc + 1 :]
+        for b in first_of_sequence(beta, lookahead, first_sets):
+            for init_item in all_items[next_sym]:
+                pair: tuple[Item[T], type[Token]] = (init_item, b)
+                if pair not in result:
+                    result.add(pair)
+                    worklist.append(pair)
+    return result
+
+
+def compute_lalr1_lookaheads[T](
+    state_list: list[State[T]],
+    entry_rules: list[tuple[StartVariable, Rule[T]]],
+    entry_state_ids: list[int],
+    goto_map: dict[tuple[int, Symbol], int],
+    all_items: dict[str, set[Item[T]]],
+    first_sets: dict[str, set[type[Token]]],
+) -> dict[tuple[int, Item[T]], set[type[Token]]]:
+    """Compute LALR(1) lookahead sets for all kernel items in the LR(0) automaton.
+
+    Implements the spontaneous-generation and propagation algorithm from
+    Aho-Sethi-Ullman §9.6.  Kernel items are items with ``loc > 0`` plus the
+    augmented start items (``loc == 0`` with a ``StartVariable`` LHS).
+
+    The algorithm has four phases:
+
+    1. Initialise empty lookahead sets and propagation lists for every kernel item.
+    2. Seed ``EOS`` into the lookahead sets of the entry-state kernel items.
+    3. For each kernel item k, run ``closure_lr1({(k, DUMMY_LOOKAHEAD)}, ...)``.
+       Items in the result whose lookahead is a real token contribute that token
+       spontaneously to the target kernel item; items whose lookahead is still
+       ``DUMMY_LOOKAHEAD`` record a propagation link from k to the target.
+    4. Propagate lookaheads along the links to a fixed point.
+
+    Args:
+        state_list: All LR(0) states (index equals state id).
+        entry_rules: Augmented start rules paired with their ``StartVariable``.
+        entry_state_ids: State id for the initial state of ``entry_rules[i]``.
+        goto_map: Mapping ``(state_id, symbol)`` → target state id.
+        all_items: Mapping non-terminal name → its initial LR(0) items.
+        first_sets: Precomputed FIRST sets from ``compute_first_sets``.
+
+    Returns:
+        Mapping ``(state_id, kernel_item)`` → set of LALR(1) lookahead token
+        classes.
+    """
+    lookahead_table: dict[tuple[int, Item[T]], set[type[Token]]] = {}
+    propagates: dict[tuple[int, Item[T]], list[tuple[int, Item[T]]]] = {}
+
+    for state in state_list:
+        for item in state.items:
+            if (
+                item.loc > 0
+                or isinstance(item.left, StartVariable)
+                or item.next is None
+            ):
+                key: tuple[int, Item[T]] = (state.id, item)
+                lookahead_table[key] = set()
+                propagates[key] = []
+
+    for i, (_, rule) in enumerate(entry_rules):
+        sid = entry_state_ids[i]
+        for item in rule.items:
+            entry_key: tuple[int, Item[T]] = (sid, item)
+            if entry_key in lookahead_table:
+                lookahead_table[entry_key].add(EOS)
+
+    for state in state_list:
+        for item in state.items:
+            if not (item.loc > 0 or isinstance(item.left, StartVariable)):
+                continue
+            src_key: tuple[int, Item[T]] = (state.id, item)
+            j = closure_lr1({(item, DUMMY_LOOKAHEAD)}, all_items, first_sets)
+            for lr1_item, b in j:
+                sym = lr1_item.next
+                if sym is None:
+                    closure_key: tuple[int, Item[T]] = (state.id, lr1_item)
+                    if closure_key not in lookahead_table:
+                        lookahead_table[closure_key] = set()
+                    if closure_key not in propagates:
+                        propagates[closure_key] = []
+                    if b is DUMMY_LOOKAHEAD:
+                        propagates[src_key].append(closure_key)
+                    else:
+                        lookahead_table[closure_key].add(b)
+                    continue
+                target_id = goto_map.get((state.id, sym))
+                if target_id is None:
+                    continue
+                moved = lr1_item.move(sym)
+                if moved is None:
+                    continue
+                target_key: tuple[int, Item[T]] = (target_id, moved)
+                if target_key not in lookahead_table:
+                    lookahead_table[target_key] = set()
+                if target_key not in propagates:
+                    propagates[target_key] = []
+                if b is DUMMY_LOOKAHEAD:
+                    propagates[src_key].append(target_key)
+                else:
+                    lookahead_table[target_key].add(b)
+
+    changed = True
+    while changed:
+        changed = False
+        for src_key, dst_keys in propagates.items():
+            for dst_key in dst_keys:
+                new = lookahead_table[src_key] - lookahead_table[dst_key]
+                if new:
+                    lookahead_table[dst_key].update(new)
+                    changed = True
+
+    return lookahead_table
+
+
 class Parser[T]:
-    """SLR(1) parser that builds a parse table from a grammar and drives LR parsing.
+    """LALR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
     Construct a ``Parser`` once from a grammar dict; then call ``parse``
     repeatedly for different inputs.
@@ -787,13 +974,11 @@ class Parser[T]:
             rule.first = first_sets[name]
             rule.first_built = True
 
-        # ── Phase 3: Compute FOLLOW sets (SLR(1) lookaheads) ─────────────────
-        # In SLR(1), a reduce action for rule A → α fires on every token in
-        # FOLLOW(A).  This is the defining over-approximation of SLR(1):
-        # it uses the global follow set rather than per-item lookaheads.
-        # Spurious conflicts arise when FOLLOW(A) contains tokens that cannot
-        # actually follow A in the specific state.  LALR(1) (T6) eliminates
-        # this by computing per-item lookaheads.
+        # ── Phase 3: Compute FOLLOW sets ─────────────────────────────────────
+        # FOLLOW sets are stored on each Rule for the public API
+        # (Rule.follow, compute_follow_sets) but are no longer used by Phase 6
+        # to place reduce actions.  Phase 5 computes tighter per-item LALR(1)
+        # lookaheads for that purpose.
         follow_sets = compute_follow_sets(rules, first_sets)
         for name, rule in rules.items():
             rule.follow = follow_sets[name]
@@ -842,7 +1027,25 @@ class Parser[T]:
                 if is_new:
                     bfs.append(target_state)
 
-        # ── Phase 5: Populate action/goto table ──────────────────────────────
+        # ── Phase 5: Compute LALR(1) per-item lookaheads ────────────────────
+        # Build a flat goto_map from the edges collected in Phase 4 and call
+        # compute_lalr1_lookaheads (ASU §9.6).  entry_state_ids[i] equals i
+        # because entry states are the first interned during Phase 4 BFS.
+        goto_map: dict[tuple[int, Symbol], int] = {
+            (src.id, sym): tgt.id for src, sym, tgt in edges
+        }
+        entry_state_ids = [self.entry_state[left.orig] for left, _ in entry_rules]
+        lookahead_table = compute_lalr1_lookaheads(
+            state_list, entry_rules, entry_state_ids, goto_map, all_items, first_sets
+        )
+        for state in state_list:
+            state.lookaheads = {
+                item: lookahead_table[(state.id, item)]
+                for item in state.items
+                if (state.id, item) in lookahead_table
+            }
+
+        # ── Phase 6: Populate action/goto table ──────────────────────────────
         # Shift and Goto actions come directly from the automaton edges.
         self.table = Table(len(state_list))
         for prev, symbol, next in edges:
@@ -853,16 +1056,17 @@ class Parser[T]:
                 self.table[prev.id, symbol] = Goto(next.id)
 
         # Reduce and Accept actions come from complete items (dot at end).
-        # SLR(1): a reduce for A → α fires on every token in FOLLOW(A).
+        # LALR(1): state.lookaheads[item] holds the per-item lookahead set
+        # computed in Phase 5.  A reduce for A → α fires only on the tokens
+        # in that set, which is a subset of FOLLOW(A) and avoids spurious
+        # conflicts caused by FOLLOW-set inflation.
         # Conflicts are resolved by precedence and associativity:
         #   Shift/Reduce: prefer shift unless the production has higher
         #     precedence than the lookahead token, or equal precedence with
         #     left associativity.
         #   Reduce/Reduce: prefer the higher-precedence production; when
         #     precedences are equal, the earlier-defined production wins
-        #     (yacc/bison convention).  This may resolve conflicts that LALR(1)
-        #     would handle correctly via per-item lookaheads, but for those
-        #     grammars the SLR(1) choice may still be wrong for some inputs.
+        #     (yacc/bison convention).
         for state in state_list:
             for item in state.items:
                 if item.next is None:
@@ -873,7 +1077,7 @@ class Parser[T]:
                             else item.left
                         )
                     else:
-                        for symbol in rules[item.left].follow:
+                        for symbol in state.lookaheads.get(item, set()):
                             reduce_action = Reduce(
                                 item.left,
                                 len(item.right),
