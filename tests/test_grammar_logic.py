@@ -740,3 +740,33 @@ def test_deeply_nested_parentheses() -> None:
     tokens += [RPAREN_C(")", lineno=1, offset=depth + 1 + i) for i in range(depth)]
     result = _calc_parser.parse("expr", tokens)
     assert eval_c(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# Section 8: Lexer integration — multiline position tracking
+# ---------------------------------------------------------------------------
+
+
+def test_lexer_multiline_position_tracking() -> None:
+    """Tokens on different lines get the correct lineno and offset=0.
+
+    Source '1\\n+\\n2': each token is on its own line.
+    The lexer resets offset to 0 at each newline.
+    Whitespace (including '\\n') is consumed by the "start" state re-entry pattern
+    and lineno is incremented per newline encountered.
+    """
+    tokens = list(CALC_LEXER.lex("start", "1\n+\n2"))
+    assert len(tokens) == 3
+
+    num1, plus, num2 = tokens
+    assert isinstance(num1, NUM_C) and num1.value == 1
+    assert num1.lineno == 1 and num1.offset == 0
+
+    assert isinstance(plus, PLUS_C)
+    assert plus.lineno == 2 and plus.offset == 0
+
+    assert isinstance(num2, NUM_C) and num2.value == 2
+    assert num2.lineno == 3 and num2.offset == 0
+
+    result = _calc_parser.parse("expr", tokens)
+    assert eval_c(result) == 3
