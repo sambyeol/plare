@@ -17,7 +17,7 @@ Construction pipeline (``Parser.__init__``):
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from itertools import chain
 from typing import Iterable, Protocol, TypeGuard
 
@@ -833,9 +833,9 @@ class Parser[T]:
 
     def __init__(
         self,
-        grammar: dict[
+        grammar: Mapping[
             str,
-            list[
+            Sequence[
                 tuple[Sequence[type[Token] | str], type[T] | None, list[int]]
                 | tuple[
                     Sequence[type[Token] | str], type[T] | None, list[int], type[Token]
@@ -867,10 +867,12 @@ class Parser[T]:
             for entry in productions:
                 if len(entry) == 4:
                     right, action, args, prec_token = entry
-                    norm_rights.append((right, action, args, prec_token.precedence))
+                    norm_rights.append(
+                        (list(right), action, args, prec_token.precedence)
+                    )
                 else:
                     right, action, args = entry
-                    norm_rights.append((right, action, args, None))
+                    norm_rights.append((list(right), action, args, None))
             rules[left] = Rule[T](left, norm_rights, global_idx)
             start_var = StartVariable(left)
             augmented = Rule[T](start_var, [([left], None, [0], None)], 0)
