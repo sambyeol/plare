@@ -721,3 +721,22 @@ def test_call_three_args() -> None:
     assert isinstance(result, CallF)
     assert result.name == "f"
     assert result.args == [1, 2, 3]
+
+
+# ---------------------------------------------------------------------------
+# Section 7: Deeply nested parentheses
+# ---------------------------------------------------------------------------
+
+
+def test_deeply_nested_parentheses() -> None:
+    """((…(1)…)) with 100 nesting levels parses correctly without stack overflow.
+
+    The LR stack is an explicit Python list (not recursive function calls),
+    so it handles arbitrarily deep nesting without hitting Python's recursion limit.
+    """
+    depth = 100
+    tokens = [LPAREN_C("(", lineno=1, offset=i) for i in range(depth)]
+    tokens += [NUM_C("1", lineno=1, offset=depth)]
+    tokens += [RPAREN_C(")", lineno=1, offset=depth + 1 + i) for i in range(depth)]
+    result = _calc_parser.parse("expr", tokens)
+    assert eval_c(result) == 1
