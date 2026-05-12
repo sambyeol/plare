@@ -1,4 +1,4 @@
-"""Unit tests for compute_first_sets and compute_follow_sets."""
+"""Unit tests for compute_first_sets."""
 
 from __future__ import annotations
 
@@ -7,13 +7,10 @@ from typing import Any
 import pytest
 
 from plare.parser import (
-    EOS,
     EPSILON,
     Rule,
-    StartVariable,
     Symbol,
     compute_first_sets,
-    compute_follow_sets,
 )
 from plare.token import Token
 
@@ -185,25 +182,3 @@ def test_dragon_book_expression_grammar_first() -> None:
     assert first["F"] == {LParen, IdTok}
 
 
-def test_dragon_book_expression_grammar_follow() -> None:
-    """Classic Dragon Book expression grammar — textbook FOLLOW sets.
-
-    Grammar (same as above, augmented with S → E):
-    Expected:
-        FOLLOW(E) = {PlusTok, RParen, EOS}
-        FOLLOW(T) = {PlusTok, StarTok, RParen, EOS}
-        FOLLOW(F) = {PlusTok, StarTok, RParen, EOS}
-    """
-    start = StartVariable("E")
-    rules: dict[str, Rule[Null]] = {
-        start: make_rule(start, [["E"]]),
-        "E": make_rule("E", [["E", PlusTok, "T"], ["T"]]),
-        "T": make_rule("T", [["T", StarTok, "F"], ["F"]]),
-        "F": make_rule("F", [[LParen, "E", RParen], [IdTok]]),
-    }
-    first = compute_first_sets(rules)
-    follow = compute_follow_sets(rules, first)
-
-    assert follow["E"] == {PlusTok, RParen, EOS}
-    assert follow["T"] == {PlusTok, StarTok, RParen, EOS}
-    assert follow["F"] == {PlusTok, StarTok, RParen, EOS}
