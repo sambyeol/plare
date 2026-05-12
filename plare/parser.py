@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections import deque
 from itertools import chain
-from typing import Iterable, Protocol
+from typing import Iterable, Protocol, TypeGuard
 
 from plare.exception import ParserError, ParsingError
 from plare.token import Token
@@ -241,18 +241,18 @@ class State[T]:
         self.items = items
         self.lookaheads = {}
 
-    @property
-    def _items_hash(self) -> int:
+    def __hash__(self) -> int:
         return hash(frozenset(self.items))
 
-    def __hash__(self) -> int:
-        return self._items_hash
-
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, State) and self._items_hash == other._items_hash
+        return _is_state(other) and self.items == other.items
 
     def __str__(self) -> str:
         return "\n".join(map(str, self.items))
+
+
+def _is_state(obj: object) -> TypeGuard[State[object]]:
+    return isinstance(obj, State)
 
 
 class Shift:
