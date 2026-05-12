@@ -1,11 +1,11 @@
-"""SLR(1) parser with operator-precedence conflict resolution.
+"""LALR(1) parser with operator-precedence conflict resolution.
 
-This module implements an **SLR(1)** (Simple LR, 1 token of lookahead) parser.
-The key characteristic of SLR(1) is that reduce actions fire on the full
-FOLLOW set of the reduced non-terminal, rather than on the tighter per-item
-lookahead sets used by LALR(1) or canonical LR(1).  This is an
-over-approximation that can cause spurious conflicts for grammars that LALR(1)
-would accept without conflict.  The LALR(1) upgrade is tracked in T6.
+This module implements an **LALR(1)** (Look-Ahead LR, 1 token of lookahead)
+parser.  Reduce actions fire on per-item lookahead sets computed via the
+spontaneous-generation and propagation algorithm (Aho-Sethi-Ullman §9.6),
+rather than on the global FOLLOW set used by SLR(1).  This eliminates
+spurious conflicts that arise when FOLLOW(A) contains tokens that cannot
+actually follow A in a specific state.
 
 Construction pipeline (``Parser.__init__``):
     1. Augment the grammar with ``StartVariable(X) → X`` entry rules.
@@ -13,7 +13,8 @@ Construction pipeline (``Parser.__init__``):
     3. Compute FOLLOW sets for every non-terminal (requires FIRST sets).
     4. Build the LR(0) canonical collection (states + transitions) via
        ``closure`` / ``goto`` BFS.
-    5. Populate the action/goto table; resolve shift/reduce and reduce/reduce
+    5. Compute LALR(1) per-item lookahead sets (ASU §9.6).
+    6. Populate the action/goto table; resolve shift/reduce and reduce/reduce
        conflicts using token precedence and associativity.
 """
 
@@ -888,7 +889,7 @@ def compute_lalr1_lookaheads[T](
 
 
 class Parser[T]:
-    """SLR(1) parser that builds a parse table from a grammar and drives LR parsing.
+    """LALR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
     Construct a ``Parser`` once from a grammar dict; then call ``parse``
     repeatedly for different inputs.
@@ -973,13 +974,11 @@ class Parser[T]:
             rule.first = first_sets[name]
             rule.first_built = True
 
-        # ── Phase 3: Compute FOLLOW sets (SLR(1) lookaheads) ─────────────────
-        # In SLR(1), a reduce action for rule A → α fires on every token in
-        # FOLLOW(A).  This is the defining over-approximation of SLR(1):
-        # it uses the global follow set rather than per-item lookaheads.
-        # Spurious conflicts arise when FOLLOW(A) contains tokens that cannot
-        # actually follow A in the specific state.  LALR(1) (T6) eliminates
-        # this by computing per-item lookaheads.
+        # ── Phase 3: Compute FOLLOW sets ─────────────────────────────────────
+        # FOLLOW sets are stored on each Rule for the public API
+        # (Rule.follow, compute_follow_sets) but are no longer used by Phase 6
+        # to place reduce actions.  Phase 5 computes tighter per-item LALR(1)
+        # lookaheads for that purpose.
         follow_sets = compute_follow_sets(rules, first_sets)
         for name, rule in rules.items():
             rule.follow = follow_sets[name]
