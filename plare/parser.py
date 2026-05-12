@@ -1053,18 +1053,31 @@ class Parser[T]:
 
         key: type[Token] | str | None = None
         token: Token | None = None
+        last_token: Token | None = None
         while True:
             if token is None:
                 token = next(lexbuf, None)
             if token is None:
-                raise ParsingError("Unexpected end of input")
+                raise ParsingError(
+                    "Unexpected end of input",
+                    token=None,
+                    lineno=last_token.lineno if last_token else 0,
+                    offset=last_token.offset if last_token else 0,
+                    expected=self.table.expected_tokens(state),
+                )
             if key is None:
                 key = type(token)
 
             try:
                 action = self.table[state, key]
             except KeyError:
-                raise ParsingError(f"Unexpected symbol: {key}") from None
+                raise ParsingError(
+                    f"Unexpected token: {type(token).__name__}",
+                    token=token,
+                    lineno=token.lineno,
+                    offset=token.offset,
+                    expected=self.table.expected_tokens(state),
+                ) from None
             logger.debug("State: %d, Symbol: %s, Action: %s", state, key, action)
             key = None
             match action:
@@ -1072,6 +1085,7 @@ class Parser[T]:
                     state = n
                     stack.append(state)
                     symbols.append(token)
+                    last_token = token
                     token = None
 
                 case Reduce(left, n, maker):
@@ -1099,10 +1113,22 @@ class Parser[T]:
 
                 case Accept(symbol):
                     if symbol != var:
-                        raise ParsingError(f"Unexpected symbol parsed: {symbol}")
+                        raise ParsingError(
+                            f"Unexpected symbol parsed: {symbol}",
+                            token=token,
+                            lineno=token.lineno,
+                            offset=token.offset,
+                            expected=self.table.expected_tokens(state),
+                        )
                     break
 
                 case _:
-                    raise ParsingError(f"No action for state {state} and symbol {key}")
+                    raise ParsingError(
+                        f"No action for state {state} and symbol {key}",
+                        token=token,
+                        lineno=token.lineno if isinstance(token, Token) else 0,
+                        offset=token.offset if isinstance(token, Token) else 0,
+                        expected=self.table.expected_tokens(state),
+                    )
 
         return symbols[-1]
