@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from collections import deque
 from itertools import chain
-from typing import Any, Iterable, Protocol
+from typing import Iterable, Protocol, TypeGuard
 
 from plare.exception import ParserError, ParsingError
 from plare.token import Token
@@ -106,10 +106,10 @@ class StartVariable(str):
     def __hash__(self) -> int:
         return super().__hash__()
 
-    def __eq__(self, other: Any) -> bool:
+    def __eq__(self, other: object) -> bool:
         return isinstance(other, StartVariable) and super().__eq__(other)
 
-    def __ne__(self, other: Any) -> bool:
+    def __ne__(self, other: object) -> bool:
         return not isinstance(other, StartVariable) or super().__ne__(other)
 
 
@@ -211,7 +211,7 @@ class Item[T]:
     def __hash__(self) -> int:
         return hash((self.left, tuple(self.right), self.loc))
 
-    def __eq__(self, value: Any) -> bool:
+    def __eq__(self, value: object) -> bool:
         return (
             isinstance(value, Item)
             and self.left == value.left
@@ -244,8 +244,11 @@ class State[T]:
     def __hash__(self) -> int:
         return hash(frozenset(self.items))
 
-    def __eq__(self, other: State[T] | Any) -> bool:
-        return isinstance(other, State) and self.items == other.items
+    def is_instance(self, obj: object) -> TypeGuard[State[T]]:
+        return isinstance(obj, State)
+
+    def __eq__(self, other: object) -> bool:
+        return self.is_instance(other) and self.items == other.items
 
     def __str__(self) -> str:
         return "\n".join(map(str, self.items))
@@ -494,7 +497,7 @@ class Rule[T]:
     def __hash__(self) -> int:
         return hash(self.left)
 
-    def __eq__(self, value: Any) -> bool:
+    def __eq__(self, value: object) -> bool:
         return isinstance(value, Rule) and self.left == value.left
 
     def __repr__(self) -> str:

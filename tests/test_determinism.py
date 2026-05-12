@@ -19,8 +19,8 @@ from plare.token import Token
 type Grammar = dict[
     str,
     list[
-        tuple[list[type[Token] | str], type | None, list[int]]
-        | tuple[list[type[Token] | str], type | None, list[int], type[Token]]
+        tuple[list[type[Token] | str], type[object] | None, list[int]]
+        | tuple[list[type[Token] | str], type[object] | None, list[int], type[Token]]
     ],
 ]
 
