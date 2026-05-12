@@ -379,3 +379,114 @@ def test_dangling_else_inner_if_gets_else() -> None:
     assert isinstance(result, IfThenD), "outer if should have no else"
     assert isinstance(result.then, IfThenElseD), "inner if should get the else clause"
     assert result.then.cond == "c2"
+
+
+# ---------------------------------------------------------------------------
+# Section 4: Three-level precedence with %prec (unary minus)
+# ---------------------------------------------------------------------------
+
+
+class NUM_UP(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = int(value)
+
+
+class PLUS_UP(Token):
+    precedence = 1
+    associative = "left"
+
+
+class STAR_UP(Token):
+    precedence = 2
+    associative = "left"
+
+
+class MINUS_UP(Token):
+    """Unary minus prefix token (no binary minus in this grammar)."""
+
+    pass
+
+
+class UMINUS_UP(Token):
+    """Pseudo-token used only as a prec_token override; never emitted by any lexer."""
+
+    precedence = 3
+    associative = "right"
+
+
+class ExprUP:
+    pass
+
+
+class NumUP(ExprUP):
+    def __init__(self, tok: NUM_UP) -> None:
+        self.value = tok.value
+
+
+class NegUP(ExprUP):
+    def __init__(self, operand: ExprUP) -> None:
+        self.operand = operand
+
+
+class AddUP(ExprUP):
+    def __init__(self, l: ExprUP, r: ExprUP) -> None:
+        self.l = l
+        self.r = r
+
+
+class MulUP(ExprUP):
+    def __init__(self, l: ExprUP, r: ExprUP) -> None:
+        self.l = l
+        self.r = r
+
+
+_unary_parser = Parser(
+    {
+        "expr": [
+            ([NUM_UP], NumUP, [0]),
+            (["expr", PLUS_UP, "expr"], AddUP, [0, 2]),
+            (["expr", STAR_UP, "expr"], MulUP, [0, 2]),
+            ([MINUS_UP, "expr"], NegUP, [1], UMINUS_UP),  # prec override → 3
+        ]
+    }
+)
+
+
+def test_three_level_unary_tighter_than_mul() -> None:
+    """-2 * 3: unary minus (prec=3 via %prec) beats STAR (prec=2) → Mul(Neg(2), 3).
+
+    Without the prec_token override the unary-minus production would inherit
+    prec=0 (MINUS_UP has no precedence), which is lower than STAR's 2, making
+    the parser shift STAR and produce Neg(Mul(2, 3)) instead.
+    """
+    result = _unary_parser.parse(
+        "expr",
+        [
+            MINUS_UP("-", lineno=1, offset=0),
+            NUM_UP("2", lineno=1, offset=1),
+            STAR_UP("*", lineno=1, offset=2),
+            NUM_UP("3", lineno=1, offset=3),
+        ],
+    )
+    assert isinstance(result, MulUP), "root must be Mul"
+    assert isinstance(result.l, NegUP), "left child must be Neg (unary binds tightest)"
+    assert isinstance(result.l.operand, NumUP) and result.l.operand.value == 2
+    assert isinstance(result.r, NumUP) and result.r.value == 3
+
+
+def test_three_level_unary_with_add() -> None:
+    """2 + -3: unary minus (prec=3) on right operand is reduced before add (prec=1)."""
+    result = _unary_parser.parse(
+        "expr",
+        [
+            NUM_UP("2", lineno=1, offset=0),
+            PLUS_UP("+", lineno=1, offset=1),
+            MINUS_UP("-", lineno=1, offset=2),
+            NUM_UP("3", lineno=1, offset=3),
+        ],
+    )
+    assert isinstance(result, AddUP), "root must be Add"
+    assert isinstance(result.l, NumUP) and result.l.value == 2
+    assert isinstance(result.r, NegUP), "right child must be Neg"
+    assert isinstance(result.r.operand, NumUP) and result.r.operand.value == 3
