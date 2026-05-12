@@ -244,15 +244,15 @@ class State[T]:
     def __hash__(self) -> int:
         return hash(frozenset(self.items))
 
+    @classmethod
+    def is_instance(cls, obj: object) -> TypeGuard[State[T]]:
+        return isinstance(obj, State)
+
     def __eq__(self, other: object) -> bool:
-        return is_state(other) and self.items == other.items
+        return self.is_instance(other) and self.items == other.items
 
     def __str__(self) -> str:
         return "\n".join(map(str, self.items))
-
-
-def is_state(obj: object) -> TypeGuard[State[object]]:
-    return isinstance(obj, State)
 
 
 class Shift:
