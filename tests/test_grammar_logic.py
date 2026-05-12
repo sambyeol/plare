@@ -261,7 +261,7 @@ def test_default_sr_conflict_is_left_associative() -> None:
         item.precedence == symbol.precedence and symbol.associative == "left"
     is True (Token default associative="left"), so reduce wins.
 
-    This means 1 + 2 + 3 produces a LEFT-leaning tree AddSR(AddSR(1,2), 3),
+    This means 1 + 2 + 3 produces a LEFT-leaning tree AddSR(AddSR(1, 2), 3),
     not a right-leaning one. The existing test_shift_reduce_resolution_prefers_shift
     only tests the two-token case and makes no tree-shape assertion.
     """
