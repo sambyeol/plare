@@ -36,6 +36,10 @@ class EPSILON(Token):
     """Sentinel token representing the empty string (ε) in FIRST sets."""
 
 
+class DUMMY_LOOKAHEAD(Token):
+    """Sentinel lookahead used during LALR(1) spontaneous-generation detection."""
+
+
 type Symbol = type[Token] | str
 
 
@@ -699,6 +703,40 @@ def intern_state[T](
     state_index[key] = sid
     state_list.append(state)
     return state, True
+
+
+def first_of_sequence[T](
+    syms: list[Symbol],
+    lookahead: type[Token],
+    first_sets: dict[str, set[type[Token]]],
+) -> set[type[Token]]:
+    """Return the set of tokens that can begin the sequence ``syms lookahead``.
+
+    Computes FIRST(syms) and, if every symbol in ``syms`` is nullable (or
+    ``syms`` is empty), includes ``lookahead``.  Used by ``closure_lr1`` to
+    derive the lookahead set for newly added LR(1) items.
+
+    Args:
+        syms: Suffix of a production RHS (β in ``[A → α • B β, a]``).
+        lookahead: The inherited lookahead ``a`` to include when ``syms``
+            derives ε.
+        first_sets: Precomputed FIRST sets from ``compute_first_sets``.
+
+    Returns:
+        The set of token classes that can begin ``syms`` followed by
+        ``lookahead``.
+    """
+    result: set[type[Token]] = set()
+    for sym in syms:
+        if isinstance(sym, type):
+            result.add(sym)
+            return result
+        sym_first = first_sets[sym]
+        result.update(sym_first - {EPSILON})
+        if EPSILON not in sym_first:
+            return result
+    result.add(lookahead)
+    return result
 
 
 class Parser[T]:
