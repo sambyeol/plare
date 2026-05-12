@@ -609,7 +609,6 @@ class Node8x:
         pass
 
 
-@pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_rr_conflict_follow_inflation_variant_1() -> None:
     """FOLLOW-set inflation creates a spurious SLR(1) R/R conflict.
 
@@ -679,7 +678,6 @@ class Node8y:
         pass
 
 
-@pytest.mark.xfail(strict=True, reason="requires LALR(1)")
 def test_lalr1_rr_conflict_follow_inflation_variant_2() -> None:
     """Isomorphic variant confirming the result is independent of token naming.
 

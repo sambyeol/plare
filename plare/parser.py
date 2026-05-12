@@ -139,6 +139,8 @@ class Item[T]:
             resolution; ``0`` means no precedence.
         definition_index: Grammar-wide ordinal of this production (0 = first
             defined).
+        lookahead: LALR(1) lookahead set assigned per-state during table
+            construction; only valid within the current state's iteration.
     """
 
     left: str | StartVariable
@@ -147,6 +149,7 @@ class Item[T]:
     maker: Maker[T]
     precedence: int
     definition_index: int
+    lookahead: set[type[Token]]
 
     def __init__(
         self,
@@ -162,6 +165,7 @@ class Item[T]:
         self.loc = loc
         self.maker = maker
         self.definition_index = definition_index
+        self.lookahead: set[type[Token]] = set()
         if prec_override is not None:
             self.precedence = prec_override
         else:
@@ -817,7 +821,11 @@ def compute_lalr1_lookaheads[T](
 
     for state in state_list:
         for item in state.items:
-            if item.loc > 0 or isinstance(item.left, StartVariable) or item.next is None:
+            if (
+                item.loc > 0
+                or isinstance(item.left, StartVariable)
+                or item.next is None
+            ):
                 key: tuple[int, Item[T]] = (state.id, item)
                 lookahead_table[key] = set()
                 propagates[key] = []
@@ -1018,7 +1026,19 @@ class Parser[T]:
                 if is_new:
                     bfs.append(target_state)
 
-        # ── Phase 5: Populate action/goto table ──────────────────────────────
+        # ── Phase 5: Compute LALR(1) per-item lookaheads ────────────────────
+        # Build a flat goto_map from the edges collected in Phase 4 and call
+        # compute_lalr1_lookaheads (ASU §9.6).  entry_state_ids[i] equals i
+        # because entry states are the first interned during Phase 4 BFS.
+        goto_map: dict[tuple[int, Symbol], int] = {
+            (src.id, sym): tgt.id for src, sym, tgt in edges
+        }
+        entry_state_ids = [self.entry_state[left.orig] for left, _ in entry_rules]
+        lookahead_table = compute_lalr1_lookaheads(
+            state_list, entry_rules, entry_state_ids, goto_map, all_items, first_sets
+        )
+
+        # ── Phase 6: Populate action/goto table ──────────────────────────────
         # Shift and Goto actions come directly from the automaton edges.
         self.table = Table(len(state_list))
         for prev, symbol, next in edges:
@@ -1029,18 +1049,20 @@ class Parser[T]:
                 self.table[prev.id, symbol] = Goto(next.id)
 
         # Reduce and Accept actions come from complete items (dot at end).
-        # SLR(1): a reduce for A → α fires on every token in FOLLOW(A).
+        # LALR(1): item.lookahead holds the per-item lookahead set computed in
+        # Phase 5.  A reduce for A → α fires only on the tokens in that set,
+        # which is a subset of FOLLOW(A) and avoids spurious conflicts caused
+        # by FOLLOW-set inflation.
         # Conflicts are resolved by precedence and associativity:
         #   Shift/Reduce: prefer shift unless the production has higher
         #     precedence than the lookahead token, or equal precedence with
         #     left associativity.
         #   Reduce/Reduce: prefer the higher-precedence production; when
         #     precedences are equal, the earlier-defined production wins
-        #     (yacc/bison convention).  This may resolve conflicts that LALR(1)
-        #     would handle correctly via per-item lookaheads, but for those
-        #     grammars the SLR(1) choice may still be wrong for some inputs.
+        #     (yacc/bison convention).
         for state in state_list:
             for item in state.items:
+                item.lookahead = lookahead_table.get((state.id, item), set())
                 if item.next is None:
                     if item.left in start_variables:
                         self.table[state.id, EOS] = Accept(
@@ -1049,7 +1071,7 @@ class Parser[T]:
                             else item.left
                         )
                     else:
-                        for symbol in rules[item.left].follow:
+                        for symbol in item.lookahead:
                             reduce_action = Reduce(
                                 item.left,
                                 len(item.right),
