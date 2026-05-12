@@ -7,10 +7,7 @@ they do not need to distinguish between construction errors and runtime errors.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from plare.token import Token
+from plare.token import Token
 
 
 class PlareException(Exception):
