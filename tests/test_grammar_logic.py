@@ -288,3 +288,94 @@ def test_default_sr_conflict_is_left_associative() -> None:
     assert isinstance(result.l.l, NumSR) and result.l.l.value == 1
     assert isinstance(result.l.r, NumSR) and result.l.r.value == 2
     assert isinstance(result.r, NumSR) and result.r.value == 3
+
+
+# ---------------------------------------------------------------------------
+# Section 3: Dangling else (xfail)
+# ---------------------------------------------------------------------------
+
+
+class IF_D(Token):
+    pass
+
+
+class THEN_D(Token):
+    pass
+
+
+class ELSE_D(Token):
+    pass
+
+
+class BASE_D(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = value
+
+
+class StmtD:
+    pass
+
+
+class BaseStmtD(StmtD):
+    def __init__(self, tok: BASE_D) -> None:
+        self.value = tok.value
+
+
+class IfThenD(StmtD):
+    def __init__(self, cond: BASE_D, then: StmtD) -> None:
+        self.cond = cond.value
+        self.then = then
+
+
+class IfThenElseD(StmtD):
+    def __init__(self, cond: BASE_D, then: StmtD, else_: StmtD) -> None:
+        self.cond = cond.value
+        self.then = then
+        self.else_ = else_
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Default S/R resolution reduces (not shifts) when both precedences are 0 "
+        "and associative='left': else binds to the outer if instead of the inner if "
+        "as most languages (C, Java) expect."
+    )
+)
+def test_dangling_else_inner_if_gets_else() -> None:
+    """The dangling-else problem: 'if c1 then if c2 then s1 else s2'.
+
+    Language convention (C, Java): else binds to the nearest (inner) if.
+    Expected parse: IfThenD(c1, IfThenElseD(c2, s1, s2)).
+
+    Plare's default S/R resolution: when the parser has reduced 'if c2 then s1'
+    to a stmt and sees ELSE as lookahead, both production precedence and token
+    precedence are 0, and associative='left' → reduce wins → the inner if becomes
+    IfThenD (no else) and the outer if absorbs the else clause.
+    Actual parse: IfThenElseD(c1, IfThenD(c2, s1), s2).
+    """
+    p = Parser(
+        {
+            "stmt": [
+                ([IF_D, BASE_D, THEN_D, "stmt", ELSE_D, "stmt"], IfThenElseD, [1, 3, 5]),
+                ([IF_D, BASE_D, THEN_D, "stmt"], IfThenD, [1, 3]),
+                ([BASE_D], BaseStmtD, [0]),
+            ]
+        }
+    )
+    tokens = [
+        IF_D("if", lineno=1, offset=0),
+        BASE_D("c1", lineno=1, offset=3),
+        THEN_D("then", lineno=1, offset=6),
+        IF_D("if", lineno=1, offset=11),
+        BASE_D("c2", lineno=1, offset=14),
+        THEN_D("then", lineno=1, offset=17),
+        BASE_D("s1", lineno=1, offset=22),
+        ELSE_D("else", lineno=1, offset=25),
+        BASE_D("s2", lineno=1, offset=30),
+    ]
+    result = p.parse("stmt", tokens)
+    # inner if should absorb the else
+    assert isinstance(result, IfThenD), "outer if should have no else"
+    assert isinstance(result.then, IfThenElseD), "inner if should get the else clause"
+    assert result.then.cond == "c2"
