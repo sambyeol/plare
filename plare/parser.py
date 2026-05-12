@@ -2,10 +2,7 @@
 
 This module implements an **LALR(1)** (Look-Ahead LR, 1 token of lookahead)
 parser.  Reduce actions fire on per-item lookahead sets computed via the
-spontaneous-generation and propagation algorithm (Aho-Sethi-Ullman §9.6),
-rather than on the global FOLLOW set used by SLR(1).  This eliminates
-spurious conflicts that arise when FOLLOW(A) contains tokens that cannot
-actually follow A in a specific state.
+spontaneous-generation and propagation algorithm (Aho-Sethi-Ullman §9.6).
 
 Construction pipeline (``Parser.__init__``):
     1. Augment the grammar with ``StartVariable(X) → X`` entry rules.
@@ -958,8 +955,7 @@ class Parser[T]:
         # Reduce and Accept actions come from complete items (dot at end).
         # LALR(1): state.lookaheads[item] holds the per-item lookahead set
         # computed in Phase 4.  A reduce for A → α fires only on the tokens
-        # in that set, which is a subset of FOLLOW(A) and avoids spurious
-        # conflicts caused by FOLLOW-set inflation.
+        # in that set.
         # Conflicts are resolved by precedence and associativity:
         #   Shift/Reduce: prefer shift unless the production has higher
         #     precedence than the lookahead token, or equal precedence with
