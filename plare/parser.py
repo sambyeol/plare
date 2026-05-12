@@ -776,6 +776,98 @@ def closure_lr1[T](
     return result
 
 
+def compute_lalr1_lookaheads[T](
+    state_list: list[State[T]],
+    entry_rules: list[tuple[StartVariable, Rule[T]]],
+    entry_state_ids: list[int],
+    goto_map: dict[tuple[int, Symbol], int],
+    all_items: dict[str, set[Item[T]]],
+    first_sets: dict[str, set[type[Token]]],
+) -> dict[tuple[int, Item[T]], set[type[Token]]]:
+    """Compute LALR(1) lookahead sets for all kernel items in the LR(0) automaton.
+
+    Implements the spontaneous-generation and propagation algorithm from
+    Aho-Sethi-Ullman §9.6.  Kernel items are items with ``loc > 0`` plus the
+    augmented start items (``loc == 0`` with a ``StartVariable`` LHS).
+
+    The algorithm has four phases:
+
+    1. Initialise empty lookahead sets and propagation lists for every kernel item.
+    2. Seed ``EOS`` into the lookahead sets of the entry-state kernel items.
+    3. For each kernel item k, run ``closure_lr1({(k, DUMMY_LOOKAHEAD)}, ...)``.
+       Items in the result whose lookahead is a real token contribute that token
+       spontaneously to the target kernel item; items whose lookahead is still
+       ``DUMMY_LOOKAHEAD`` record a propagation link from k to the target.
+    4. Propagate lookaheads along the links to a fixed point.
+
+    Args:
+        state_list: All LR(0) states (index equals state id).
+        entry_rules: Augmented start rules paired with their ``StartVariable``.
+        entry_state_ids: State id for the initial state of ``entry_rules[i]``.
+        goto_map: Mapping ``(state_id, symbol)`` → target state id.
+        all_items: Mapping non-terminal name → its initial LR(0) items.
+        first_sets: Precomputed FIRST sets from ``compute_first_sets``.
+
+    Returns:
+        Mapping ``(state_id, kernel_item)`` → set of LALR(1) lookahead token
+        classes.
+    """
+    lookahead_table: dict[tuple[int, Item[T]], set[type[Token]]] = {}
+    propagates: dict[tuple[int, Item[T]], list[tuple[int, Item[T]]]] = {}
+
+    for state in state_list:
+        for item in state.items:
+            if item.loc > 0 or isinstance(item.left, StartVariable):
+                key: tuple[int, Item[T]] = (state.id, item)
+                lookahead_table[key] = set()
+                propagates[key] = []
+
+    for i, (_, rule) in enumerate(entry_rules):
+        sid = entry_state_ids[i]
+        for item in rule.items:
+            entry_key: tuple[int, Item[T]] = (sid, item)
+            if entry_key in lookahead_table:
+                lookahead_table[entry_key].add(EOS)
+
+    for state in state_list:
+        for item in state.items:
+            if not (item.loc > 0 or isinstance(item.left, StartVariable)):
+                continue
+            src_key: tuple[int, Item[T]] = (state.id, item)
+            j = closure_lr1({(item, DUMMY_LOOKAHEAD)}, all_items, first_sets)
+            for lr1_item, b in j:
+                sym = lr1_item.next
+                if sym is None:
+                    continue
+                target_id = goto_map.get((state.id, sym))
+                if target_id is None:
+                    continue
+                moved = lr1_item.move(sym)
+                if moved is None:
+                    continue
+                target_key: tuple[int, Item[T]] = (target_id, moved)
+                if target_key not in lookahead_table:
+                    lookahead_table[target_key] = set()
+                if target_key not in propagates:
+                    propagates[target_key] = []
+                if b is DUMMY_LOOKAHEAD:
+                    propagates[src_key].append(target_key)
+                else:
+                    lookahead_table[target_key].add(b)
+
+    changed = True
+    while changed:
+        changed = False
+        for src_key, dst_keys in propagates.items():
+            for dst_key in dst_keys:
+                new = lookahead_table[src_key] - lookahead_table[dst_key]
+                if new:
+                    lookahead_table[dst_key].update(new)
+                    changed = True
+
+    return lookahead_table
+
+
 class Parser[T]:
     """SLR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
