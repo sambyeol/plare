@@ -770,3 +770,41 @@ def test_lexer_multiline_position_tracking() -> None:
 
     result = _calc_parser.parse("expr", tokens)
     assert eval_c(result) == 3
+
+
+# ---------------------------------------------------------------------------
+# Section 9: Error cases
+# ---------------------------------------------------------------------------
+
+
+def test_error_unclosed_paren() -> None:
+    """(1 + 2 with no closing paren raises ParsingError at end-of-input."""
+    with pytest.raises(ParsingError):
+        _calc_parser.parse(
+            "expr",
+            [
+                LPAREN_C("(", lineno=1, offset=0),
+                _num(1, 1),
+                PLUS_C("+", lineno=1, offset=2),
+                _num(2, 3),
+                # RPAREN_C missing
+            ],
+        )
+
+
+def test_error_trailing_tokens() -> None:
+    """1 + 2 followed by an extra token raises ParsingError.
+
+    After the parser reduces to the top-level expr and sees EOS, it accepts.
+    But if extra tokens precede EOS, the accept state has no action for them.
+    """
+    with pytest.raises(ParsingError):
+        _calc_parser.parse(
+            "expr",
+            [
+                _num(1, 0),
+                PLUS_C("+", lineno=1, offset=1),
+                _num(2, 2),
+                _num(3, 3),  # extra token — parser cannot accept with this pending
+            ],
+        )
