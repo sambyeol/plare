@@ -132,7 +132,7 @@ CALC_LEXER = Lexer(
 calc_parser = Parser(CALC_GRAMMAR)
 
 
-def _num(v: int, o: int = 0) -> NUM_C:
+def num(v: int, o: int = 0) -> NUM_C:
     return NUM_C(str(v), lineno=1, offset=o)
 
 
@@ -140,7 +140,7 @@ def test_calc_single_addition() -> None:
     """1 + 2 evaluates to 3 and produces an AddC node."""
     result = calc_parser.parse(
         "expr",
-        [_num(1, 0), PLUS_C("+", lineno=1, offset=1), _num(2, 2)],
+        [num(1, 0), PLUS_C("+", lineno=1, offset=1), num(2, 2)],
     )
     assert isinstance(result, AddC)
     assert isinstance(result.l, NumC) and result.l.value == 1
@@ -153,11 +153,11 @@ def test_calc_precedence_mul_over_add() -> None:
     result = calc_parser.parse(
         "expr",
         [
-            _num(1, 0),
+            num(1, 0),
             PLUS_C("+", lineno=1, offset=1),
-            _num(2, 2),
+            num(2, 2),
             STAR_C("*", lineno=1, offset=3),
-            _num(3, 4),
+            num(3, 4),
         ],
     )
     assert isinstance(result, AddC), "'+' must be root because '*' binds tighter"
@@ -170,11 +170,11 @@ def test_calc_left_assoc_subtraction_chain() -> None:
     result = calc_parser.parse(
         "expr",
         [
-            _num(10, 0),
+            num(10, 0),
             MINUS_C("-", lineno=1, offset=2),
-            _num(3, 3),
+            num(3, 3),
             MINUS_C("-", lineno=1, offset=4),
-            _num(2, 5),
+            num(2, 5),
         ],
     )
     assert isinstance(result, SubC)
@@ -186,7 +186,7 @@ def test_calc_integer_division() -> None:
     """7 / 2 produces DivC and floor-divides to 3."""
     result = calc_parser.parse(
         "expr",
-        [_num(7, 0), SLASH_C("/", lineno=1, offset=1), _num(2, 2)],
+        [num(7, 0), SLASH_C("/", lineno=1, offset=1), num(2, 2)],
     )
     assert isinstance(result, DivC)
     assert eval_c(result) == 3
@@ -197,12 +197,12 @@ def test_calc_parentheses_override_precedence() -> None:
     result = calc_parser.parse(
         "expr",
         [
-            _num(2, 0),
+            num(2, 0),
             STAR_C("*", lineno=1, offset=1),
             LPAREN_C("(", lineno=1, offset=2),
-            _num(3, 3),
+            num(3, 3),
             PLUS_C("+", lineno=1, offset=4),
-            _num(4, 5),
+            num(4, 5),
             RPAREN_C(")", lineno=1, offset=6),
         ],
     )
@@ -216,11 +216,11 @@ def test_calc_mixed_left_assoc_same_precedence() -> None:
     result = calc_parser.parse(
         "expr",
         [
-            _num(1, 0),
+            num(1, 0),
             MINUS_C("-", lineno=1, offset=1),
-            _num(2, 2),
+            num(2, 2),
             PLUS_C("+", lineno=1, offset=3),
-            _num(3, 4),
+            num(3, 4),
         ],
     )
     assert isinstance(result, AddC), "outer op must be Add"
@@ -553,7 +553,7 @@ list_parser = Parser(
 )
 
 
-def _num_l(v: int, o: int = 0) -> NUM_L:
+def num_l(v: int, o: int = 0) -> NUM_L:
     return NUM_L(str(v), lineno=1, offset=o)
 
 
@@ -573,7 +573,7 @@ def test_list_single_element() -> None:
         "list",
         [
             LBRACKET_L("[", lineno=1, offset=0),
-            _num_l(42, 1),
+            num_l(42, 1),
             RBRACKET_L("]", lineno=1, offset=3),
         ],
     )
@@ -587,11 +587,11 @@ def test_list_three_elements() -> None:
         "list",
         [
             LBRACKET_L("[", lineno=1, offset=0),
-            _num_l(1, 1),
+            num_l(1, 1),
             COMMA_L(",", lineno=1, offset=2),
-            _num_l(2, 4),
+            num_l(2, 4),
             COMMA_L(",", lineno=1, offset=5),
-            _num_l(3, 7),
+            num_l(3, 7),
             RBRACKET_L("]", lineno=1, offset=8),
         ],
     )
@@ -784,9 +784,9 @@ def test_error_unclosed_paren() -> None:
             "expr",
             [
                 LPAREN_C("(", lineno=1, offset=0),
-                _num(1, 1),
+                num(1, 1),
                 PLUS_C("+", lineno=1, offset=2),
-                _num(2, 3),
+                num(2, 3),
                 # RPAREN_C missing
             ],
         )
@@ -802,10 +802,10 @@ def test_error_trailing_tokens() -> None:
         calc_parser.parse(
             "expr",
             [
-                _num(1, 0),
+                num(1, 0),
                 PLUS_C("+", lineno=1, offset=1),
-                _num(2, 2),
-                _num(3, 3),  # extra token — parser cannot accept with this pending
+                num(2, 2),
+                num(3, 3),  # extra token — parser cannot accept with this pending
             ],
         )
 
