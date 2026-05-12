@@ -245,13 +245,13 @@ class State[T]:
         return hash(frozenset(self.items))
 
     def __eq__(self, other: object) -> bool:
-        return _is_state(other) and self.items == other.items
+        return is_state(other) and self.items == other.items
 
     def __str__(self) -> str:
         return "\n".join(map(str, self.items))
 
 
-def _is_state(obj: object) -> TypeGuard[State[object]]:
+def is_state(obj: object) -> TypeGuard[State[object]]:
     return isinstance(obj, State)
 
 
