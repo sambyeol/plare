@@ -597,3 +597,127 @@ def test_list_three_elements() -> None:
     )
     assert isinstance(result, ListL)
     assert result.items == [1, 2, 3]
+
+
+# ---------------------------------------------------------------------------
+# Section 6: Function call grammar
+# ---------------------------------------------------------------------------
+
+
+class ID_F(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = value
+
+
+class LPAREN_F(Token):
+    pass
+
+
+class RPAREN_F(Token):
+    pass
+
+
+class COMMA_F(Token):
+    pass
+
+
+class NUM_F(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = int(value)
+
+
+class ArgsF:
+    items: list[int]
+
+
+class SingleArgF(ArgsF):
+    def __init__(self, head: NUM_F) -> None:
+        self.items = [head.value]
+
+
+class ConsArgsF(ArgsF):
+    def __init__(self, head: NUM_F, tail: ArgsF) -> None:
+        self.items = [head.value] + tail.items
+
+
+class CallF:
+    def __init__(self, name: ID_F, args: ArgsF) -> None:
+        self.name = name.value
+        self.args = args.items
+
+
+class NoArgCallF:
+    def __init__(self, name: ID_F) -> None:
+        self.name = name.value
+        self.args: list[int] = []
+
+
+_call_parser = Parser(
+    {
+        "call": [
+            ([ID_F, LPAREN_F, "args", RPAREN_F], CallF, [0, 2]),
+            ([ID_F, LPAREN_F, RPAREN_F], NoArgCallF, [0]),
+        ],
+        "args": [
+            ([NUM_F, COMMA_F, "args"], ConsArgsF, [0, 2]),
+            ([NUM_F], SingleArgF, [0]),
+        ],
+    }
+)
+
+
+def _num_f(v: int, o: int = 0) -> NUM_F:
+    return NUM_F(str(v), lineno=1, offset=o)
+
+
+def test_call_no_args() -> None:
+    """f() produces NoArgCallF with name='f' and args==[]."""
+    result = _call_parser.parse(
+        "call",
+        [
+            ID_F("f", lineno=1, offset=0),
+            LPAREN_F("(", lineno=1, offset=1),
+            RPAREN_F(")", lineno=1, offset=2),
+        ],
+    )
+    assert isinstance(result, NoArgCallF)
+    assert result.name == "f"
+    assert result.args == []
+
+
+def test_call_one_arg() -> None:
+    """f(1) produces CallF with name='f' and args==[1]."""
+    result = _call_parser.parse(
+        "call",
+        [
+            ID_F("f", lineno=1, offset=0),
+            LPAREN_F("(", lineno=1, offset=1),
+            _num_f(1, 2),
+            RPAREN_F(")", lineno=1, offset=3),
+        ],
+    )
+    assert isinstance(result, CallF)
+    assert result.name == "f"
+    assert result.args == [1]
+
+
+def test_call_three_args() -> None:
+    """f(1, 2, 3) produces CallF with name='f' and args==[1, 2, 3]."""
+    result = _call_parser.parse(
+        "call",
+        [
+            ID_F("f", lineno=1, offset=0),
+            LPAREN_F("(", lineno=1, offset=1),
+            _num_f(1, 2),
+            COMMA_F(",", lineno=1, offset=3),
+            _num_f(2, 5),
+            COMMA_F(",", lineno=1, offset=6),
+            _num_f(3, 8),
+            RPAREN_F(")", lineno=1, offset=9),
+        ],
+    )
+    assert isinstance(result, CallF)
+    assert result.name == "f"
+    assert result.args == [1, 2, 3]
