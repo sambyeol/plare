@@ -817,7 +817,7 @@ def compute_lalr1_lookaheads[T](
 
     for state in state_list:
         for item in state.items:
-            if item.loc > 0 or isinstance(item.left, StartVariable):
+            if item.loc > 0 or isinstance(item.left, StartVariable) or item.next is None:
                 key: tuple[int, Item[T]] = (state.id, item)
                 lookahead_table[key] = set()
                 propagates[key] = []
@@ -838,6 +838,15 @@ def compute_lalr1_lookaheads[T](
             for lr1_item, b in j:
                 sym = lr1_item.next
                 if sym is None:
+                    closure_key: tuple[int, Item[T]] = (state.id, lr1_item)
+                    if closure_key not in lookahead_table:
+                        lookahead_table[closure_key] = set()
+                    if closure_key not in propagates:
+                        propagates[closure_key] = []
+                    if b is DUMMY_LOOKAHEAD:
+                        propagates[src_key].append(closure_key)
+                    else:
+                        lookahead_table[closure_key].add(b)
                     continue
                 target_id = goto_map.get((state.id, sym))
                 if target_id is None:
