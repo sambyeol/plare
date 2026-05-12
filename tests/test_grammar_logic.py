@@ -539,7 +539,7 @@ class EmptyListL:
         self.items: list[int] = []
 
 
-_list_parser = Parser(
+list_parser = Parser(
     {
         "list": [
             ([LBRACKET_L, "items", RBRACKET_L], ListL, [1]),
@@ -559,7 +559,7 @@ def _num_l(v: int, o: int = 0) -> NUM_L:
 
 def test_list_empty() -> None:
     """[] produces EmptyListL with items == []."""
-    result = _list_parser.parse(
+    result = list_parser.parse(
         "list",
         [LBRACKET_L("[", lineno=1, offset=0), RBRACKET_L("]", lineno=1, offset=1)],
     )
@@ -569,7 +569,7 @@ def test_list_empty() -> None:
 
 def test_list_single_element() -> None:
     """[42] produces ListL with items == [42]."""
-    result = _list_parser.parse(
+    result = list_parser.parse(
         "list",
         [
             LBRACKET_L("[", lineno=1, offset=0),
@@ -583,7 +583,7 @@ def test_list_single_element() -> None:
 
 def test_list_three_elements() -> None:
     """[1, 2, 3] produces ListL with items == [1, 2, 3]."""
-    result = _list_parser.parse(
+    result = list_parser.parse(
         "list",
         [
             LBRACKET_L("[", lineno=1, offset=0),
@@ -654,7 +654,7 @@ class NoArgCallF:
         self.args: list[int] = []
 
 
-_call_parser = Parser(
+call_parser = Parser(
     {
         "call": [
             ([ID_F, LPAREN_F, "args", RPAREN_F], CallF, [0, 2]),
@@ -668,13 +668,13 @@ _call_parser = Parser(
 )
 
 
-def _num_f(v: int, o: int = 0) -> NUM_F:
+def num_f(v: int, o: int = 0) -> NUM_F:
     return NUM_F(str(v), lineno=1, offset=o)
 
 
 def test_call_no_args() -> None:
     """f() produces NoArgCallF with name='f' and args==[]."""
-    result = _call_parser.parse(
+    result = call_parser.parse(
         "call",
         [
             ID_F("f", lineno=1, offset=0),
@@ -689,12 +689,12 @@ def test_call_no_args() -> None:
 
 def test_call_one_arg() -> None:
     """f(1) produces CallF with name='f' and args==[1]."""
-    result = _call_parser.parse(
+    result = call_parser.parse(
         "call",
         [
             ID_F("f", lineno=1, offset=0),
             LPAREN_F("(", lineno=1, offset=1),
-            _num_f(1, 2),
+            num_f(1, 2),
             RPAREN_F(")", lineno=1, offset=3),
         ],
     )
@@ -705,16 +705,16 @@ def test_call_one_arg() -> None:
 
 def test_call_three_args() -> None:
     """f(1, 2, 3) produces CallF with name='f' and args==[1, 2, 3]."""
-    result = _call_parser.parse(
+    result = call_parser.parse(
         "call",
         [
             ID_F("f", lineno=1, offset=0),
             LPAREN_F("(", lineno=1, offset=1),
-            _num_f(1, 2),
+            num_f(1, 2),
             COMMA_F(",", lineno=1, offset=3),
-            _num_f(2, 5),
+            num_f(2, 5),
             COMMA_F(",", lineno=1, offset=6),
-            _num_f(3, 8),
+            num_f(3, 8),
             RPAREN_F(")", lineno=1, offset=9),
         ],
     )
@@ -840,7 +840,7 @@ class ProgramE:
         self.stmts = stmts.items
 
 
-_program_parser = Parser(
+program_parser = Parser(
     {
         "program": [
             (["stmts"], ProgramE, [0]),
@@ -855,14 +855,14 @@ _program_parser = Parser(
 
 def test_empty_program() -> None:
     """An empty token stream produces ProgramE with stmts == []."""
-    result = _program_parser.parse("program", [])
+    result = program_parser.parse("program", [])
     assert isinstance(result, ProgramE)
     assert result.stmts == []
 
 
 def test_single_statement_program() -> None:
     """One STMT_E token produces ProgramE with len(stmts) == 1."""
-    result = _program_parser.parse(
+    result = program_parser.parse(
         "program",
         [STMT_E("x", lineno=1, offset=0)],
     )
@@ -873,7 +873,7 @@ def test_single_statement_program() -> None:
 
 def test_three_statement_program() -> None:
     """Three STMT_E tokens produce ProgramE with len(stmts) == 3 in order."""
-    result = _program_parser.parse(
+    result = program_parser.parse(
         "program",
         [
             STMT_E("a", lineno=1, offset=0),
