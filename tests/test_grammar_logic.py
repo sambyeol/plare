@@ -490,3 +490,110 @@ def test_three_level_unary_with_add() -> None:
     assert isinstance(result.l, NumUP) and result.l.value == 2
     assert isinstance(result.r, NegUP), "right child must be Neg"
     assert isinstance(result.r.operand, NumUP) and result.r.operand.value == 3
+
+
+# ---------------------------------------------------------------------------
+# Section 5: Comma-separated list grammar
+# ---------------------------------------------------------------------------
+
+
+class LBRACKET_L(Token):
+    pass
+
+
+class RBRACKET_L(Token):
+    pass
+
+
+class COMMA_L(Token):
+    pass
+
+
+class NUM_L(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = int(value)
+
+
+class ItemsL:
+    items: list[int]
+
+
+class SingleItemL(ItemsL):
+    def __init__(self, head: NUM_L) -> None:
+        self.items = [head.value]
+
+
+class ConsItemsL(ItemsL):
+    def __init__(self, head: NUM_L, tail: ItemsL) -> None:
+        self.items = [head.value] + tail.items
+
+
+class ListL:
+    def __init__(self, items_node: ItemsL) -> None:
+        self.items = items_node.items
+
+
+class EmptyListL:
+    def __init__(self) -> None:
+        self.items: list[int] = []
+
+
+_list_parser = Parser(
+    {
+        "list": [
+            ([LBRACKET_L, "items", RBRACKET_L], ListL, [1]),
+            ([LBRACKET_L, RBRACKET_L], EmptyListL, []),
+        ],
+        "items": [
+            ([NUM_L, COMMA_L, "items"], ConsItemsL, [0, 2]),
+            ([NUM_L], SingleItemL, [0]),
+        ],
+    }
+)
+
+
+def _num_l(v: int, o: int = 0) -> NUM_L:
+    return NUM_L(str(v), lineno=1, offset=o)
+
+
+def test_list_empty() -> None:
+    """[] produces EmptyListL with items == []."""
+    result = _list_parser.parse(
+        "list",
+        [LBRACKET_L("[", lineno=1, offset=0), RBRACKET_L("]", lineno=1, offset=1)],
+    )
+    assert isinstance(result, EmptyListL)
+    assert result.items == []
+
+
+def test_list_single_element() -> None:
+    """[42] produces ListL with items == [42]."""
+    result = _list_parser.parse(
+        "list",
+        [
+            LBRACKET_L("[", lineno=1, offset=0),
+            _num_l(42, 1),
+            RBRACKET_L("]", lineno=1, offset=3),
+        ],
+    )
+    assert isinstance(result, ListL)
+    assert result.items == [42]
+
+
+def test_list_three_elements() -> None:
+    """[1, 2, 3] produces ListL with items == [1, 2, 3]."""
+    result = _list_parser.parse(
+        "list",
+        [
+            LBRACKET_L("[", lineno=1, offset=0),
+            _num_l(1, 1),
+            COMMA_L(",", lineno=1, offset=2),
+            _num_l(2, 4),
+            COMMA_L(",", lineno=1, offset=5),
+            _num_l(3, 7),
+            RBRACKET_L("]", lineno=1, offset=8),
+        ],
+    )
+    assert isinstance(result, ListL)
+    assert result.items == [1, 2, 3]
