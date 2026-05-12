@@ -739,6 +739,43 @@ def first_of_sequence[T](
     return result
 
 
+def closure_lr1[T](
+    lr1_kernel: set[tuple[Item[T], type[Token]]],
+    all_items: dict[str, set[Item[T]]],
+    first_sets: dict[str, set[type[Token]]],
+) -> set[tuple[Item[T], type[Token]]]:
+    """Compute the LR(1) closure of a set of LR(1) items.
+
+    Each LR(1) item is a pair ``(item, lookahead)``.  For every item
+    ``[A → α • B β, a]`` in the set, adds ``[B → • γ, b]`` for every
+    production ``B → γ`` and every ``b ∈ first_of_sequence(β, a, first_sets)``.
+    Repeats until no new items are added (ASU §9.5).
+
+    Args:
+        lr1_kernel: Seed LR(1) items as ``(Item, lookahead-token-class)`` pairs.
+        all_items: Mapping from non-terminal name to its initial LR(0) items.
+        first_sets: Precomputed FIRST sets from ``compute_first_sets``.
+
+    Returns:
+        The closed set of LR(1) items (superset of ``lr1_kernel``).
+    """
+    result: set[tuple[Item[T], type[Token]]] = set(lr1_kernel)
+    worklist: deque[tuple[Item[T], type[Token]]] = deque(lr1_kernel)
+    while worklist:
+        item, lookahead = worklist.popleft()
+        next_sym = item.next
+        if next_sym is None or isinstance(next_sym, type):
+            continue
+        beta = item.right[item.loc + 1 :]
+        for b in first_of_sequence(beta, lookahead, first_sets):
+            for init_item in all_items[next_sym]:
+                pair: tuple[Item[T], type[Token]] = (init_item, b)
+                if pair not in result:
+                    result.add(pair)
+                    worklist.append(pair)
+    return result
+
+
 class Parser[T]:
     """SLR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
