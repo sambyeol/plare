@@ -226,3 +226,65 @@ def test_calc_mixed_left_assoc_same_precedence() -> None:
     assert isinstance(result, AddC), "outer op must be Add"
     assert isinstance(result.l, SubC), "left child must be Sub (left-assoc)"
     assert eval_c(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# Section 2: Default S/R conflict is left-associative
+# ---------------------------------------------------------------------------
+
+
+class NUM_SR(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = int(value)
+
+
+class PLUS_SR(Token):
+    pass  # no precedence set → default 0, associative="left"
+
+
+class NumSR:
+    def __init__(self, tok: NUM_SR) -> None:
+        self.value = tok.value
+
+
+class AddSR:
+    def __init__(self, l: object, r: object) -> None:
+        self.l = l
+        self.r = r
+
+
+def test_default_sr_conflict_is_left_associative() -> None:
+    """With no explicit precedence, S/R conflict resolves to reduce (left-associative).
+
+    When both item.precedence and symbol.precedence are 0, the parser condition:
+        item.precedence == symbol.precedence and symbol.associative == "left"
+    is True (Token default associative="left"), so reduce wins.
+
+    This means 1 + 2 + 3 produces a LEFT-leaning tree AddSR(AddSR(1,2), 3),
+    not a right-leaning one. The existing test_shift_reduce_resolution_prefers_shift
+    only tests the two-token case and makes no tree-shape assertion.
+    """
+    p = Parser(
+        {
+            "expr": [
+                (["expr", PLUS_SR, "expr"], AddSR, [0, 2]),
+                ([NUM_SR], NumSR, [0]),
+            ]
+        }
+    )
+    result = p.parse(
+        "expr",
+        [
+            NUM_SR("1", lineno=1, offset=0),
+            PLUS_SR("+", lineno=1, offset=1),
+            NUM_SR("2", lineno=1, offset=2),
+            PLUS_SR("+", lineno=1, offset=3),
+            NUM_SR("3", lineno=1, offset=4),
+        ],
+    )
+    assert isinstance(result, AddSR)
+    assert isinstance(result.l, AddSR), "default S/R resolution must produce a left-leaning tree"
+    assert isinstance(result.l.l, NumSR) and result.l.l.value == 1
+    assert isinstance(result.l.r, NumSR) and result.l.r.value == 2
+    assert isinstance(result.r, NumSR) and result.r.value == 3
