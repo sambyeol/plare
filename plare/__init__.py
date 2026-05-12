@@ -3,7 +3,7 @@
 Public API
 ----------
 * ``Lexer`` (:mod:`plare.lexer`) — regex-driven stateful tokeniser.
-* ``Parser`` (:mod:`plare.parser`) — SLR(1) parser with operator-precedence
+* ``Parser`` (:mod:`plare.parser`) — LALR(1) parser with operator-precedence
   conflict resolution.
 * ``Token`` (:mod:`plare.token`) — base class for all terminal symbols.
 * ``PlareException``, ``LexingError``, ``ParserError``, ``ParsingError``
