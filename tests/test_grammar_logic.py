@@ -8,12 +8,22 @@ cases, and top-level epsilon productions.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pytest
 
 from plare.exception import ParsingError
 from plare.lexer import Lexer
 from plare.parser import Parser
 from plare.token import Token
+
+type GrammarDict[T] = dict[
+    str,
+    list[
+        tuple[Sequence[type[Token] | str], type[T] | None, list[int]]
+        | tuple[Sequence[type[Token] | str], type[T] | None, list[int], type[Token]]
+    ],
+]
 
 # ---------------------------------------------------------------------------
 # Section 1: Arithmetic Calculator
@@ -103,7 +113,7 @@ def eval_c(node: ExprC) -> int:
             raise ValueError(f"Unknown node: {node}")
 
 
-CALC_GRAMMAR: dict = {
+CALC_GRAMMAR: GrammarDict[ExprC] = {
     "expr": [
         ([NUM_C], NumC, [0]),
         (["expr", PLUS_C, "expr"], AddC, [0, 2]),
@@ -178,7 +188,9 @@ def test_calc_left_assoc_subtraction_chain() -> None:
         ],
     )
     assert isinstance(result, SubC)
-    assert isinstance(result.l, SubC), "left-assoc: outer sub must have inner sub as left child"
+    assert isinstance(
+        result.l, SubC
+    ), "left-assoc: outer sub must have inner sub as left child"
     assert eval_c(result) == 5
 
 
@@ -284,7 +296,9 @@ def test_default_sr_conflict_is_left_associative() -> None:
         ],
     )
     assert isinstance(result, AddSR)
-    assert isinstance(result.l, AddSR), "default S/R resolution must produce a left-leaning tree"
+    assert isinstance(
+        result.l, AddSR
+    ), "default S/R resolution must produce a left-leaning tree"
     assert isinstance(result.l.l, NumSR) and result.l.l.value == 1
     assert isinstance(result.l.r, NumSR) and result.l.r.value == 2
     assert isinstance(result.r, NumSR) and result.r.value == 3
@@ -357,7 +371,11 @@ def test_dangling_else_inner_if_gets_else() -> None:
     p = Parser(
         {
             "stmt": [
-                ([IF_D, BASE_D, THEN_D, "stmt", ELSE_D, "stmt"], IfThenElseD, [1, 3, 5]),
+                (
+                    [IF_D, BASE_D, THEN_D, "stmt", ELSE_D, "stmt"],
+                    IfThenElseD,
+                    [1, 3, 5],
+                ),
                 ([IF_D, BASE_D, THEN_D, "stmt"], IfThenD, [1, 3]),
                 ([BASE_D], BaseStmtD, [0]),
             ]
@@ -539,18 +557,17 @@ class EmptyListL:
         self.items: list[int] = []
 
 
-list_parser = Parser(
-    {
-        "list": [
-            ([LBRACKET_L, "items", RBRACKET_L], ListL, [1]),
-            ([LBRACKET_L, RBRACKET_L], EmptyListL, []),
-        ],
-        "items": [
-            ([NUM_L, COMMA_L, "items"], ConsItemsL, [0, 2]),
-            ([NUM_L], SingleItemL, [0]),
-        ],
-    }
-)
+LIST_GRAMMAR: GrammarDict[ListL | EmptyListL | ConsItemsL | SingleItemL] = {
+    "list": [
+        ([LBRACKET_L, "items", RBRACKET_L], ListL, [1]),
+        ([LBRACKET_L, RBRACKET_L], EmptyListL, []),
+    ],
+    "items": [
+        ([NUM_L, COMMA_L, "items"], ConsItemsL, [0, 2]),
+        ([NUM_L], SingleItemL, [0]),
+    ],
+}
+list_parser = Parser(LIST_GRAMMAR)
 
 
 def num_l(v: int, o: int = 0) -> NUM_L:
@@ -654,18 +671,17 @@ class NoArgCallF:
         self.args: list[int] = []
 
 
-call_parser = Parser(
-    {
-        "call": [
-            ([ID_F, LPAREN_F, "args", RPAREN_F], CallF, [0, 2]),
-            ([ID_F, LPAREN_F, RPAREN_F], NoArgCallF, [0]),
-        ],
-        "args": [
-            ([NUM_F, COMMA_F, "args"], ConsArgsF, [0, 2]),
-            ([NUM_F], SingleArgF, [0]),
-        ],
-    }
-)
+CALL_GRAMMAR: GrammarDict[CallF | NoArgCallF | ConsArgsF | SingleArgF] = {
+    "call": [
+        ([ID_F, LPAREN_F, "args", RPAREN_F], CallF, [0, 2]),
+        ([ID_F, LPAREN_F, RPAREN_F], NoArgCallF, [0]),
+    ],
+    "args": [
+        ([NUM_F, COMMA_F, "args"], ConsArgsF, [0, 2]),
+        ([NUM_F], SingleArgF, [0]),
+    ],
+}
+call_parser = Parser(CALL_GRAMMAR)
 
 
 def num_f(v: int, o: int = 0) -> NUM_F:
@@ -739,6 +755,7 @@ def test_deeply_nested_parentheses() -> None:
     tokens += [NUM_C("1", lineno=1, offset=depth)]
     tokens += [RPAREN_C(")", lineno=1, offset=depth + 1 + i) for i in range(depth)]
     result = calc_parser.parse("expr", tokens)
+    assert isinstance(result, ExprC)
     assert eval_c(result) == 1
 
 
@@ -769,6 +786,7 @@ def test_lexer_multiline_position_tracking() -> None:
     assert num2.lineno == 3 and num2.offset == 0
 
     result = calc_parser.parse("expr", tokens)
+    assert isinstance(result, ExprC)
     assert eval_c(result) == 3
 
 
@@ -840,17 +858,16 @@ class ProgramE:
         self.stmts = stmts.items
 
 
-program_parser = Parser(
-    {
-        "program": [
-            (["stmts"], ProgramE, [0]),
-        ],
-        "stmts": [
-            ([STMT_E, "stmts"], NonEmptyStmtsE, [0, 1]),
-            ([], EmptyStmtsE, []),
-        ],
-    }
-)
+PROGRAM_GRAMMAR: GrammarDict[ProgramE | NonEmptyStmtsE | EmptyStmtsE] = {
+    "program": [
+        (["stmts"], ProgramE, [0]),
+    ],
+    "stmts": [
+        ([STMT_E, "stmts"], NonEmptyStmtsE, [0, 1]),
+        ([], EmptyStmtsE, []),
+    ],
+}
+program_parser = Parser(PROGRAM_GRAMMAR)
 
 
 def test_empty_program() -> None:

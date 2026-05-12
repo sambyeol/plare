@@ -17,6 +17,7 @@ Construction pipeline (``Parser.__init__``):
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Sequence
 from itertools import chain
 from typing import Iterable, Protocol, TypeGuard
 
@@ -835,8 +836,10 @@ class Parser[T]:
         grammar: dict[
             str,
             list[
-                tuple[list[type[Token] | str], type[T] | None, list[int]]
-                | tuple[list[type[Token] | str], type[T] | None, list[int], type[Token]]
+                tuple[Sequence[type[Token] | str], type[T] | None, list[int]]
+                | tuple[
+                    Sequence[type[Token] | str], type[T] | None, list[int], type[Token]
+                ]
             ],
         ],
     ) -> None:
