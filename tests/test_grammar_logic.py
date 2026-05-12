@@ -808,3 +808,79 @@ def test_error_trailing_tokens() -> None:
                 _num(3, 3),  # extra token — parser cannot accept with this pending
             ],
         )
+
+
+# ---------------------------------------------------------------------------
+# Section 10: Top-level epsilon production
+# ---------------------------------------------------------------------------
+
+
+class STMT_E(Token):
+    def __init__(self, value: str, *, lineno: int, offset: int) -> None:
+        super().__init__(value, lineno=lineno, offset=offset)
+        self.value = value
+
+
+class StmtsE:
+    items: list[STMT_E]
+
+
+class EmptyStmtsE(StmtsE):
+    def __init__(self) -> None:
+        self.items = []
+
+
+class NonEmptyStmtsE(StmtsE):
+    def __init__(self, stmt: STMT_E, tail: StmtsE) -> None:
+        self.items = [stmt] + tail.items
+
+
+class ProgramE:
+    def __init__(self, stmts: StmtsE) -> None:
+        self.stmts = stmts.items
+
+
+_program_parser = Parser(
+    {
+        "program": [
+            (["stmts"], ProgramE, [0]),
+        ],
+        "stmts": [
+            ([STMT_E, "stmts"], NonEmptyStmtsE, [0, 1]),
+            ([], EmptyStmtsE, []),
+        ],
+    }
+)
+
+
+def test_empty_program() -> None:
+    """An empty token stream produces ProgramE with stmts == []."""
+    result = _program_parser.parse("program", [])
+    assert isinstance(result, ProgramE)
+    assert result.stmts == []
+
+
+def test_single_statement_program() -> None:
+    """One STMT_E token produces ProgramE with len(stmts) == 1."""
+    result = _program_parser.parse(
+        "program",
+        [STMT_E("x", lineno=1, offset=0)],
+    )
+    assert isinstance(result, ProgramE)
+    assert len(result.stmts) == 1
+    assert isinstance(result.stmts[0], STMT_E)
+
+
+def test_three_statement_program() -> None:
+    """Three STMT_E tokens produce ProgramE with len(stmts) == 3 in order."""
+    result = _program_parser.parse(
+        "program",
+        [
+            STMT_E("a", lineno=1, offset=0),
+            STMT_E("b", lineno=1, offset=2),
+            STMT_E("c", lineno=1, offset=4),
+        ],
+    )
+    assert isinstance(result, ProgramE)
+    assert len(result.stmts) == 3
+    assert [s.value for s in result.stmts] == ["a", "b", "c"]
