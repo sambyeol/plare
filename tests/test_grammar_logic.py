@@ -129,7 +129,7 @@ CALC_LEXER = Lexer(
     }
 )
 
-_calc_parser = Parser(CALC_GRAMMAR)
+calc_parser = Parser(CALC_GRAMMAR)
 
 
 def _num(v: int, o: int = 0) -> NUM_C:
@@ -138,7 +138,7 @@ def _num(v: int, o: int = 0) -> NUM_C:
 
 def test_calc_single_addition() -> None:
     """1 + 2 evaluates to 3 and produces an AddC node."""
-    result = _calc_parser.parse(
+    result = calc_parser.parse(
         "expr",
         [_num(1, 0), PLUS_C("+", lineno=1, offset=1), _num(2, 2)],
     )
@@ -150,7 +150,7 @@ def test_calc_single_addition() -> None:
 
 def test_calc_precedence_mul_over_add() -> None:
     """1 + 2 * 3: STAR (prec=2) beats PLUS (prec=1), so root is AddC, right child is MulC."""
-    result = _calc_parser.parse(
+    result = calc_parser.parse(
         "expr",
         [
             _num(1, 0),
@@ -167,7 +167,7 @@ def test_calc_precedence_mul_over_add() -> None:
 
 def test_calc_left_assoc_subtraction_chain() -> None:
     """10 - 3 - 2: left-associativity produces SubC(SubC(10, 3), 2) = 5, not 9."""
-    result = _calc_parser.parse(
+    result = calc_parser.parse(
         "expr",
         [
             _num(10, 0),
@@ -184,7 +184,7 @@ def test_calc_left_assoc_subtraction_chain() -> None:
 
 def test_calc_integer_division() -> None:
     """7 / 2 produces DivC and floor-divides to 3."""
-    result = _calc_parser.parse(
+    result = calc_parser.parse(
         "expr",
         [_num(7, 0), SLASH_C("/", lineno=1, offset=1), _num(2, 2)],
     )
@@ -194,7 +194,7 @@ def test_calc_integer_division() -> None:
 
 def test_calc_parentheses_override_precedence() -> None:
     """2 * (3 + 4): parentheses force add before multiply despite STAR having higher prec."""
-    result = _calc_parser.parse(
+    result = calc_parser.parse(
         "expr",
         [
             _num(2, 0),
@@ -213,7 +213,7 @@ def test_calc_parentheses_override_precedence() -> None:
 
 def test_calc_mixed_left_assoc_same_precedence() -> None:
     """1 - 2 + 3: MINUS and PLUS share prec=1 with left-assoc; result is (1-2)+3 = 2."""
-    result = _calc_parser.parse(
+    result = calc_parser.parse(
         "expr",
         [
             _num(1, 0),
@@ -738,7 +738,7 @@ def test_deeply_nested_parentheses() -> None:
     tokens = [LPAREN_C("(", lineno=1, offset=i) for i in range(depth)]
     tokens += [NUM_C("1", lineno=1, offset=depth)]
     tokens += [RPAREN_C(")", lineno=1, offset=depth + 1 + i) for i in range(depth)]
-    result = _calc_parser.parse("expr", tokens)
+    result = calc_parser.parse("expr", tokens)
     assert eval_c(result) == 1
 
 
@@ -768,7 +768,7 @@ def test_lexer_multiline_position_tracking() -> None:
     assert isinstance(num2, NUM_C) and num2.value == 2
     assert num2.lineno == 3 and num2.offset == 0
 
-    result = _calc_parser.parse("expr", tokens)
+    result = calc_parser.parse("expr", tokens)
     assert eval_c(result) == 3
 
 
@@ -780,7 +780,7 @@ def test_lexer_multiline_position_tracking() -> None:
 def test_error_unclosed_paren() -> None:
     """(1 + 2 with no closing paren raises ParsingError at end-of-input."""
     with pytest.raises(ParsingError):
-        _calc_parser.parse(
+        calc_parser.parse(
             "expr",
             [
                 LPAREN_C("(", lineno=1, offset=0),
@@ -799,7 +799,7 @@ def test_error_trailing_tokens() -> None:
     But if extra tokens precede EOS, the accept state has no action for them.
     """
     with pytest.raises(ParsingError):
-        _calc_parser.parse(
+        calc_parser.parse(
             "expr",
             [
                 _num(1, 0),
