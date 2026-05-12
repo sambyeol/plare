@@ -2,19 +2,15 @@
 
 This module implements an **LALR(1)** (Look-Ahead LR, 1 token of lookahead)
 parser.  Reduce actions fire on per-item lookahead sets computed via the
-spontaneous-generation and propagation algorithm (Aho-Sethi-Ullman §9.6),
-rather than on the global FOLLOW set used by SLR(1).  This eliminates
-spurious conflicts that arise when FOLLOW(A) contains tokens that cannot
-actually follow A in a specific state.
+spontaneous-generation and propagation algorithm (Aho-Sethi-Ullman §9.6).
 
 Construction pipeline (``Parser.__init__``):
     1. Augment the grammar with ``StartVariable(X) → X`` entry rules.
     2. Compute FIRST sets for every non-terminal.
-    3. Compute FOLLOW sets for every non-terminal (requires FIRST sets).
-    4. Build the LR(0) canonical collection (states + transitions) via
+    3. Build the LR(0) canonical collection (states + transitions) via
        ``closure`` / ``goto`` BFS.
-    5. Compute LALR(1) per-item lookahead sets (ASU §9.6).
-    6. Populate the action/goto table; resolve shift/reduce and reduce/reduce
+    4. Compute LALR(1) per-item lookahead sets (ASU §9.6).
+    5. Populate the action/goto table; resolve shift/reduce and reduce/reduce
        conflicts using token precedence and associativity.
 """
 
@@ -413,17 +409,17 @@ class Table[T]:
         state, symbol = key
         return self.table[state][symbol]
 
-    def force_update(self, state: int, symbol: Symbol, action: Action[T]) -> None:
-        """Overwrite a table entry without conflict checking.
+    def expected_tokens(self, state: int) -> list[type[Token]]:
+        """Return terminal classes that have an action in *state*."""
+        return [sym for sym in self.table[state] if isinstance(sym, type)]
 
-        Used exclusively by ``Parser.__init__`` after it has decided which
-        action wins a conflict.  Must not be called for any other purpose.
-        """
-        self.table[state][symbol] = action
+    def resolve_conflict(self, state: int, symbol: Symbol, winner: Action[T]) -> None:
+        """Overwrite a table entry with the winning action from a resolved conflict."""
+        self.table[state][symbol] = winner
 
 
 class Rule[T]:
-    """All RHS alternatives for a single non-terminal, together with its FIRST/FOLLOW sets.
+    """All RHS alternatives for a single non-terminal.
 
     ``Rule`` is the unit of grammar specification.  One ``Rule`` object
     aggregates every production ``A → rhs₁ | rhs₂ | …`` for a given
@@ -431,16 +427,13 @@ class Rule[T]:
 
     Attributes:
         left: The non-terminal name (LHS).
-        rights: List of ``(rhs_symbols, maker)`` pairs, one per alternative.
-        first: FIRST(A) — populated by ``calc_first``.
-        follow: FOLLOW(A) — populated by ``calc_follow``.
+        rights: List of ``(rhs_symbols, maker, prec_override)`` triples.
+        definition_indices: Grammar-wide ordinal for each production alternative.
     """
 
     left: str
     rights: list[tuple[list[Symbol], Maker[T], int | None]]
     definition_indices: list[int]
-    first: set[type[Token]]
-    follow: set[type[Token]]
 
     def __init__(
         self,
@@ -458,41 +451,6 @@ class Rule[T]:
             for right, action, args, prec_override in rights
         ]
         self.definition_indices = list(range(start_index, start_index + len(rights)))
-        self.first_built = False
-        self.follow_built = False
-
-    def calc_first(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Return FIRST(A), computing it via ``compute_first_sets`` if needed.
-
-        Args:
-            rules: Complete grammar mapping non-terminal name → ``Rule``.
-
-        Returns:
-            The FIRST set for this non-terminal (also stored in ``self.first``).
-        """
-        if not self.first_built:
-            fs = compute_first_sets(rules)
-            for n, r in rules.items():
-                r.first = fs[n]
-                r.first_built = True
-        return self.first
-
-    def calc_follow(self, rules: dict[str, Rule[T]]) -> set[type[Token]]:
-        """Return FOLLOW(A), computing it via ``compute_follow_sets`` if needed.
-
-        Args:
-            rules: Complete grammar mapping non-terminal name → ``Rule``.
-
-        Returns:
-            The FOLLOW set for this non-terminal (also stored in ``self.follow``).
-        """
-        if not self.follow_built:
-            fs = {n: r.first for n, r in rules.items()}
-            fw = compute_follow_sets(rules, fs)
-            for n, r in rules.items():
-                r.follow = fw[n]
-                r.follow_built = True
-        return self.follow
 
     def __hash__(self) -> int:
         return hash(self.left)
@@ -558,57 +516,6 @@ def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token
                         first[name].add(EPSILON)
                         changed = True
     return first
-
-
-def compute_follow_sets[T](
-    rules: dict[str, Rule[T]],
-    first_sets: dict[str, set[type[Token]]],
-) -> dict[str, set[type[Token]]]:
-    """Compute FOLLOW sets for all non-terminals via worklist fixed-point iteration.
-
-    Seeds EOS into every augmented start symbol, then propagates terminals
-    through productions until no FOLLOW set changes.  Requires FIRST sets
-    to have been computed first.
-
-    Args:
-        rules: Complete grammar mapping non-terminal name → ``Rule``.
-        first_sets: Precomputed FIRST sets (from ``compute_first_sets``).
-
-    Returns:
-        Mapping from non-terminal name to its FOLLOW set.
-    """
-    follow: dict[str, set[type[Token]]] = {name: set() for name in rules}
-    for name in rules:
-        if isinstance(name, StartVariable):
-            follow[name].add(EOS)
-    changed = True
-    while changed:
-        changed = False
-        for lhs, rule in rules.items():
-            for right, _, _ in rule.rights:
-                for i, sym in enumerate(right):
-                    if not isinstance(sym, str):
-                        continue
-                    trailer: set[type[Token]] = set()
-                    all_nullable = True
-                    for next_sym in right[i + 1 :]:
-                        if isinstance(next_sym, type):
-                            trailer.add(next_sym)
-                            all_nullable = False
-                            break
-                        else:
-                            next_first = first_sets[next_sym]
-                            trailer.update(next_first - {EPSILON})
-                            if EPSILON not in next_first:
-                                all_nullable = False
-                                break
-                    if all_nullable:
-                        trailer.update(follow[lhs])
-                    added = trailer - follow[sym]
-                    if added:
-                        follow[sym].update(added)
-                        changed = True
-    return follow
 
 
 def symbol_sort_key(s: Symbol) -> tuple[int, str]:
@@ -971,21 +878,8 @@ class Parser[T]:
 
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
-        # when computing FOLLOW sets in Phase 3.
+        # during LALR(1) lookahead propagation in Phase 4.
         first_sets = compute_first_sets(rules)
-        for name, rule in rules.items():
-            rule.first = first_sets[name]
-            rule.first_built = True
-
-        # ── Phase 3: Compute FOLLOW sets ─────────────────────────────────────
-        # FOLLOW sets are stored on each Rule for the public API
-        # (Rule.follow, compute_follow_sets) but are no longer used by Phase 6
-        # to place reduce actions.  Phase 5 computes tighter per-item LALR(1)
-        # lookaheads for that purpose.
-        follow_sets = compute_follow_sets(rules, first_sets)
-        for name, rule in rules.items():
-            rule.follow = follow_sets[name]
-            rule.follow_built = True
 
         all_items = {left: rule.items for left, rule in rules.items()}
         all_tokens = set[type[Token]]()
@@ -993,7 +887,7 @@ class Parser[T]:
             for right, _, _ in rule.rights:
                 all_tokens.update(t for t in right if isinstance(t, type))
 
-        # ── Phase 4: Build LR(0) canonical collection ────────────────────────
+        # ── Phase 3: Build LR(0) canonical collection ────────────────────────
         # BFS over the LR(0) automaton.  ``state_index`` maps a frozenset of
         # items to the assigned state id, giving O(1) deduplication instead of
         # a linear scan.  ``worklist`` is a deque so processing order is
@@ -1030,10 +924,10 @@ class Parser[T]:
                 if is_new:
                     bfs.append(target_state)
 
-        # ── Phase 5: Compute LALR(1) per-item lookaheads ────────────────────
-        # Build a flat goto_map from the edges collected in Phase 4 and call
+        # ── Phase 4: Compute LALR(1) per-item lookaheads ────────────────────
+        # Build a flat goto_map from the edges collected in Phase 3 and call
         # compute_lalr1_lookaheads (ASU §9.6).  entry_state_ids[i] equals i
-        # because entry states are the first interned during Phase 4 BFS.
+        # because entry states are the first interned during Phase 3 BFS.
         goto_map: dict[tuple[int, Symbol], int] = {
             (src.id, sym): tgt.id for src, sym, tgt in edges
         }
@@ -1048,7 +942,7 @@ class Parser[T]:
                 if (state.id, item) in lookahead_table
             }
 
-        # ── Phase 6: Populate action/goto table ──────────────────────────────
+        # ── Phase 5: Populate action/goto table ──────────────────────────────
         # Shift and Goto actions come directly from the automaton edges.
         self.table = Table(len(state_list))
         for prev, symbol, next in edges:
@@ -1060,9 +954,8 @@ class Parser[T]:
 
         # Reduce and Accept actions come from complete items (dot at end).
         # LALR(1): state.lookaheads[item] holds the per-item lookahead set
-        # computed in Phase 5.  A reduce for A → α fires only on the tokens
-        # in that set, which is a subset of FOLLOW(A) and avoids spurious
-        # conflicts caused by FOLLOW-set inflation.
+        # computed in Phase 4.  A reduce for A → α fires only on the tokens
+        # in that set.
         # Conflicts are resolved by precedence and associativity:
         #   Shift/Reduce: prefer shift unless the production has higher
         #     precedence than the lookahead token, or equal precedence with
@@ -1101,7 +994,7 @@ class Parser[T]:
                                     item.precedence == symbol.precedence
                                     and symbol.associative == "left"
                                 ):
-                                    self.table.force_update(
+                                    self.table.resolve_conflict(
                                         state.id, symbol, reduce_action
                                     )
                             except ReduceReduceConflict as e:
@@ -1112,12 +1005,12 @@ class Parser[T]:
                                     item.left,
                                 )
                                 if item.precedence > e.precedence:
-                                    self.table.force_update(
+                                    self.table.resolve_conflict(
                                         state.id, symbol, reduce_action
                                     )
                                 elif item.precedence == e.precedence:
                                     if item.definition_index < e.definition_index:
-                                        self.table.force_update(
+                                        self.table.resolve_conflict(
                                             state.id, symbol, reduce_action
                                         )
         logger.info("Parser created")
@@ -1155,18 +1048,31 @@ class Parser[T]:
 
         key: type[Token] | str | None = None
         token: Token | None = None
+        last_token: Token | None = None
         while True:
             if token is None:
                 token = next(lexbuf, None)
             if token is None:
-                raise ParsingError("Unexpected end of input")
+                raise ParsingError(
+                    "Unexpected end of input",
+                    token=None,
+                    lineno=last_token.lineno if last_token else 0,
+                    offset=last_token.offset if last_token else 0,
+                    expected=self.table.expected_tokens(state),
+                )
             if key is None:
                 key = type(token)
 
             try:
                 action = self.table[state, key]
             except KeyError:
-                raise ParsingError(f"Unexpected symbol: {key}") from None
+                raise ParsingError(
+                    f"Unexpected token: {type(token).__name__}",
+                    token=token,
+                    lineno=token.lineno,
+                    offset=token.offset,
+                    expected=self.table.expected_tokens(state),
+                ) from None
             logger.debug("State: %d, Symbol: %s, Action: %s", state, key, action)
             key = None
             match action:
@@ -1174,6 +1080,7 @@ class Parser[T]:
                     state = n
                     stack.append(state)
                     symbols.append(token)
+                    last_token = token
                     token = None
 
                 case Reduce(left, n, maker):
@@ -1201,10 +1108,22 @@ class Parser[T]:
 
                 case Accept(symbol):
                     if symbol != var:
-                        raise ParsingError(f"Unexpected symbol parsed: {symbol}")
+                        raise ParsingError(
+                            f"Unexpected symbol parsed: {symbol}",
+                            token=token,
+                            lineno=token.lineno,
+                            offset=token.offset,
+                            expected=self.table.expected_tokens(state),
+                        )
                     break
 
                 case _:
-                    raise ParsingError(f"No action for state {state} and symbol {key}")
+                    raise ParsingError(
+                        f"No action for state {state} and symbol {key}",
+                        token=token,
+                        lineno=token.lineno,
+                        offset=token.offset,
+                        expected=self.table.expected_tokens(state),
+                    )
 
         return symbols[-1]

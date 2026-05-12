@@ -562,25 +562,15 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
 
 
 # ---------------------------------------------------------------------------
-# LALR(1)-resolvable grammars — FOLLOW-set inflation creates a spurious R/R
-# conflict in SLR(1) that LALR(1) per-item lookaheads cleanly resolve.
+# LALR(1)-resolvable grammars — two non-terminals share the same single-token
+# body and land in the same LR(0) reduce state, creating an apparent R/R
+# conflict.  LALR(1) per-item lookaheads in that state are disjoint, so the
+# conflict is resolved without ambiguity.
 #
-# Two non-terminals (A_nt/B_nt, X_nt/Y_nt) share the same single-token body
-# and land in the same LR(0) reduce state.  One of them also appears in an
-# *unrelated* production that inflates its FOLLOW set so that it overlaps the
-# other's FOLLOW set — but only in states where the two items do NOT coexist.
-#
-# Key distinction from the Aho/Sethi/Ullman (LR(1)-only) grammar:
-#   In the Aho grammar both non-terminals appear symmetrically in four
-#   productions, so every LR(1) state that holds {A_nt → C •, B_nt → C •}
-#   comes in two mirror images whose lookaheads cross-contaminate when merged
-#   in LALR(1), creating a new R/R conflict not present in LR(1).
-#
-#   Here, the extra production that inflates FOLLOW(A_nt) produces a *separate*
-#   LR(0) state (core {A_nt → E •} only, no B_nt) that is never merged with
-#   the conflict state (core {A_nt → E •, B_nt → E •}).  LALR(1) lookaheads
-#   in the conflict state remain {B8x} vs {C8x, D8x} — disjoint — so no
-#   new conflict is introduced by merging.
+# The grammars are constructed so that an extra production creates a *separate*
+# LR(0) state (core with only one of the two non-terminals) that is never
+# merged with the conflict state.  This keeps the LALR(1) lookaheads in the
+# conflict state disjoint, making the grammar LALR(1) but not SLR(1).
 # ---------------------------------------------------------------------------
 
 
@@ -609,8 +599,8 @@ class Node8x:
         pass
 
 
-def test_lalr1_rr_conflict_follow_inflation_variant_1() -> None:
-    """FOLLOW-set inflation creates a spurious SLR(1) R/R conflict.
+def test_lalr1_resolves_rr_conflict_variant_1() -> None:
+    """LALR(1) resolves an R/R conflict that SLR(1) cannot.
 
     Grammar:
       start → A8x A_nt B8x | A8x B_nt C8x | A8x B_nt D8x | A_nt C8x
@@ -618,17 +608,9 @@ def test_lalr1_rr_conflict_follow_inflation_variant_1() -> None:
       B_nt  → E8x
 
     The state reached after [A8x, E8x] contains {A_nt → E8x •, B_nt → E8x •}.
-    FOLLOW(A_nt) = {B8x, C8x}  (from "A8x A_nt B8x" and "A_nt C8x")
-    FOLLOW(B_nt) = {C8x, D8x}  (from "A8x B_nt C8x" and "A8x B_nt D8x")
-    Intersection {C8x} creates a spurious SLR(1) R/R conflict; definition order
-    picks A_nt.  Parsing [A8x, E8x, C8x] therefore fails: SLR(1) reduces E8x
-    to A_nt, then rejects C8x (expected B8x).
-
     LALR(1) per-item lookaheads in that state are {B8x} for A_nt and
-    {C8x, D8x} for B_nt — disjoint — so C8x correctly triggers B_nt and the
-    parse succeeds.  The inflation token C8x only appears as a lookahead in a
-    separate LR(0) state (core {A_nt → E8x •} alone), which is never merged
-    with the conflict state, so LALR(1) is sufficient.
+    {C8x, D8x} for B_nt — disjoint — so C8x correctly triggers B_nt and
+    [A8x, E8x, C8x] parses successfully.
     """
     p = Parser(
         {
@@ -678,7 +660,7 @@ class Node8y:
         pass
 
 
-def test_lalr1_rr_conflict_follow_inflation_variant_2() -> None:
+def test_lalr1_resolves_rr_conflict_variant_2() -> None:
     """Isomorphic variant confirming the result is independent of token naming.
 
     Grammar:
@@ -686,13 +668,9 @@ def test_lalr1_rr_conflict_follow_inflation_variant_2() -> None:
       X_nt  → T8y
       Y_nt  → T8y
 
-    FOLLOW(X_nt) = {Q8y, R8y}  (from "P8y X_nt Q8y" and "X_nt R8y")
-    FOLLOW(Y_nt) = {R8y, S8y}  (from "P8y Y_nt R8y" and "P8y Y_nt S8y")
-    Intersection {R8y}: spurious SLR(1) R/R; X_nt wins by definition order.
-    Parsing [P8y, T8y, R8y] fails: SLR(1) reduces T8y to X_nt, then rejects
-    R8y (expected Q8y).
     LALR(1) per-item lookaheads after [P8y, T8y]: X_nt → {Q8y}, Y_nt →
-    {R8y, S8y} — disjoint — so R8y correctly triggers Y_nt.
+    {R8y, S8y} — disjoint — so R8y correctly triggers Y_nt and
+    [P8y, T8y, R8y] parses successfully.
     """
     p = Parser(
         {
