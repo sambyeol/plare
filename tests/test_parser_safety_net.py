@@ -599,7 +599,7 @@ class Node8x:
         pass
 
 
-def test_lalr1_rr_conflict_follow_inflation_variant_1() -> None:
+def test_lalr1_resolves_rr_conflict_variant_1() -> None:
     """LALR(1) resolves an R/R conflict that SLR(1) cannot.
 
     Grammar:
@@ -660,7 +660,7 @@ class Node8y:
         pass
 
 
-def test_lalr1_rr_conflict_follow_inflation_variant_2() -> None:
+def test_lalr1_resolves_rr_conflict_variant_2() -> None:
     """Isomorphic variant confirming the result is independent of token naming.
 
     Grammar:
