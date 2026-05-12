@@ -9,6 +9,11 @@ from plare.lexer import Lexer
 from plare.parser import Parser
 from plare.token import Token
 
+type GrammarEntry[T] = (
+    tuple[list[type[Token] | str], type[T] | None, list[int]]
+    | tuple[list[type[Token] | str], type[T] | None, list[int], type[Token]]
+)
+
 
 # ---------------------------------------------------------------------------
 # Token classes for the test grammar: Num "+" Num
@@ -30,7 +35,7 @@ class Expr:
 
 
 # Grammar: expr → Num Plus Num
-GRAMMAR: dict[str, list] = {
+GRAMMAR: dict[str, list[GrammarEntry[Expr]]] = {
     "expr": [
         ([Num, Plus, Num], Expr, [0, 2]),
     ],

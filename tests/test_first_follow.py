@@ -180,5 +180,3 @@ def test_dragon_book_expression_grammar_first() -> None:
     assert first["E"] == {LParen, IdTok}
     assert first["T"] == {LParen, IdTok}
     assert first["F"] == {LParen, IdTok}
-
-

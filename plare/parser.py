@@ -414,7 +414,7 @@ class Table[T]:
 
     def expected_tokens(self, state: int) -> list[type[Token]]:
         """Return terminal classes that have an action in *state*."""
-        return [sym for sym in self.table[state] if isinstance(sym, type) and issubclass(sym, Token)]
+        return [sym for sym in self.table[state] if isinstance(sym, type)]
 
     def resolve_conflict(self, state: int, symbol: Symbol, winner: Action[T]) -> None:
         """Overwrite a table entry with the winning action from a resolved conflict."""
@@ -519,7 +519,6 @@ def compute_first_sets[T](rules: dict[str, Rule[T]]) -> dict[str, set[type[Token
                         first[name].add(EPSILON)
                         changed = True
     return first
-
 
 
 def symbol_sort_key(s: Symbol) -> tuple[int, str]:
@@ -1126,8 +1125,8 @@ class Parser[T]:
                     raise ParsingError(
                         f"No action for state {state} and symbol {key}",
                         token=token,
-                        lineno=token.lineno if isinstance(token, Token) else 0,
-                        offset=token.offset if isinstance(token, Token) else 0,
+                        lineno=token.lineno,
+                        offset=token.offset,
                         expected=self.table.expected_tokens(state),
                     )
 
