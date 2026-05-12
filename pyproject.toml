@@ -53,5 +53,8 @@ markers = [
     "slow: marks tests as slow-running (deselect with '-m \"not slow\"')",
 ]
 
+[tool.pyright]
+typeCheckingMode = "strict"
+
 [tool.isort]
 profile = "black"

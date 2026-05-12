@@ -18,7 +18,7 @@ class TokB(Token):
         self.offset = offset
 
 
-def make_item(left: str, right: list, loc: int = 0) -> Item[object]:
+def make_item(left: str, right: list[type[Token] | str], loc: int = 0) -> Item[object]:
     return Item(left, right, IDMaker(0), 0, loc)
 
 

@@ -8,8 +8,6 @@ Covers two orthogonal features:
 
 from __future__ import annotations
 
-import pytest
-
 from plare.parser import Parser
 from plare.token import Token
 
@@ -185,7 +183,15 @@ def test_rr_equal_precedence_first_defined_wins() -> None:
     ParserError.  With it, first_val (defined earlier, lower definition_index)
     wins, so the reduction always produces FirstResult.
     """
-    grammar: dict = {
+    grammar: dict[
+        str,
+        list[
+            tuple[list[type[Token] | str], type[object] | None, list[int]]
+            | tuple[
+                list[type[Token] | str], type[object] | None, list[int], type[Token]
+            ]
+        ],
+    ] = {
         "result": [
             (["first_val"], FirstResult, [0]),
             (["second_val"], SecondResult, [0]),
