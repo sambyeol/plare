@@ -139,8 +139,6 @@ class Item[T]:
             resolution; ``0`` means no precedence.
         definition_index: Grammar-wide ordinal of this production (0 = first
             defined).
-        lookahead: LALR(1) lookahead set assigned per-state during table
-            construction; only valid within the current state's iteration.
     """
 
     left: str | StartVariable
@@ -149,7 +147,6 @@ class Item[T]:
     maker: Maker[T]
     precedence: int
     definition_index: int
-    lookahead: set[type[Token]]
 
     def __init__(
         self,
@@ -165,7 +162,6 @@ class Item[T]:
         self.loc = loc
         self.maker = maker
         self.definition_index = definition_index
-        self.lookahead: set[type[Token]] = set()
         if prec_override is not None:
             self.precedence = prec_override
         else:
@@ -229,14 +225,20 @@ class State[T]:
     Attributes:
         id: Index used to look up rows in the ``Table``.
         items: The closed set of LR(0) items that define this state.
+        lookaheads: LALR(1) lookahead sets keyed by item.  For each complete
+            item ``[A → α •]`` in this state, ``lookaheads[item]`` is the set
+            of tokens on which the reduction fires.  Populated during Phase 5
+            of ``Parser.__init__``.
     """
 
     id: int
     items: set[Item[T]]
+    lookaheads: dict[Item[T], set[type[Token]]]
 
     def __init__(self, id: int, items: set[Item[T]]) -> None:
         self.id = id
         self.items = items
+        self.lookaheads = {}
 
     def __hash__(self) -> int:
         return hash(frozenset(self.items))
@@ -1037,6 +1039,12 @@ class Parser[T]:
         lookahead_table = compute_lalr1_lookaheads(
             state_list, entry_rules, entry_state_ids, goto_map, all_items, first_sets
         )
+        for state in state_list:
+            state.lookaheads = {
+                item: lookahead_table[(state.id, item)]
+                for item in state.items
+                if (state.id, item) in lookahead_table
+            }
 
         # ── Phase 6: Populate action/goto table ──────────────────────────────
         # Shift and Goto actions come directly from the automaton edges.
@@ -1049,10 +1057,10 @@ class Parser[T]:
                 self.table[prev.id, symbol] = Goto(next.id)
 
         # Reduce and Accept actions come from complete items (dot at end).
-        # LALR(1): item.lookahead holds the per-item lookahead set computed in
-        # Phase 5.  A reduce for A → α fires only on the tokens in that set,
-        # which is a subset of FOLLOW(A) and avoids spurious conflicts caused
-        # by FOLLOW-set inflation.
+        # LALR(1): state.lookaheads[item] holds the per-item lookahead set
+        # computed in Phase 5.  A reduce for A → α fires only on the tokens
+        # in that set, which is a subset of FOLLOW(A) and avoids spurious
+        # conflicts caused by FOLLOW-set inflation.
         # Conflicts are resolved by precedence and associativity:
         #   Shift/Reduce: prefer shift unless the production has higher
         #     precedence than the lookahead token, or equal precedence with
@@ -1062,7 +1070,6 @@ class Parser[T]:
         #     (yacc/bison convention).
         for state in state_list:
             for item in state.items:
-                item.lookahead = lookahead_table.get((state.id, item), set())
                 if item.next is None:
                     if item.left in start_variables:
                         self.table[state.id, EOS] = Accept(
@@ -1071,7 +1078,7 @@ class Parser[T]:
                             else item.left
                         )
                     else:
-                        for symbol in item.lookahead:
+                        for symbol in state.lookaheads.get(item, set()):
                             reduce_action = Reduce(
                                 item.left,
                                 len(item.right),
