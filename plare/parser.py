@@ -244,8 +244,7 @@ class State[T]:
     def __hash__(self) -> int:
         return hash(frozenset(self.items))
 
-    @classmethod
-    def is_instance(cls, obj: object) -> TypeGuard[State[T]]:
+    def is_instance(self, obj: object) -> TypeGuard[State[T]]:
         return isinstance(obj, State)
 
     def __eq__(self, other: object) -> bool:
