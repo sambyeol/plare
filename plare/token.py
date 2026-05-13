@@ -50,7 +50,7 @@ class Token:
         have different hashes.
     """
 
-    associative: assoc = "left"
+    associative: assoc = "right"
     precedence: int = 0
 
     def __init__(self, value: str, *, lineno: int, offset: int) -> None:
