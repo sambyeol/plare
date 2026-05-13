@@ -5,14 +5,14 @@ To test the program first, run the following command.
 ```bash
 $ python calc.py data/ex02.calc
 ```
-The program will parse the `data/ex02.calc`, interprete, and show the answer as follows.
+The program will parse the `data/ex02.calc`, interpret, and show the answer as follows.
 ```
 == Source (data/ex02.calc) ==
 (1 + (1 * 2))
 == Result (data/ex02.calc) ==
 3
 ```
-Note that the program correctly parse the program considering the precedence of multiplication and addition.
+Note that the program correctly parses the program considering the precedence of multiplication and addition.
 
 ## Defining Language
 To make a parser, first thing to do is defining a language.
@@ -43,7 +43,7 @@ class Add:
 
 ## Defining Lexer
 A lexer will tokenize the given source string.
-To make a lexer you only have to do is make tokens that inherits`Token` class.
+To make a lexer, all you need to do is define token classes that inherit from `Token`.
 For example, `+` can be defined as follows:
 ```python
 from plare.token import Token
@@ -74,7 +74,7 @@ For example, the following rule will create a `PLUS` token when it matches `+`:
 }
 ```
 You can switch to other lexing rules, by assigning a string instead of a `Token`.
-The following code will switchin to `"comment"` mode when the string starts with `//`:
+The following code will switch to `"comment"` mode when the string starts with `//`:
 ```python
 {
     "start": [
@@ -135,7 +135,7 @@ For example, you can pass the 2nd subtree like following:
 }
 ```
 
-After defining grannar, you can make a parser with `Parser`, like:
+After defining grammar, you can make a parser with `Parser`, like:
 ```python
 from plare.parser import Parser
 
@@ -151,7 +151,7 @@ parsed = parser.parse("exp", lexer.lex("start", "1 + 2"))
 ## Resolving conflicts
 You can resolve conflicts between shift and reduce actions based on "precedence" and "associative".
 The precedence and associative can be defined as class variable when defining tokens.
-By default, all token have precedence of `0` and and `"left"` associative.
+By default, all tokens have a precedence of `0` and `"left"` associativity.
 In this example, `STAR` and `DIV` have higher precedence, which means `1 + 2 * 3` will be parsed into `(1 + (2 * 3))`, not `((1 + 2) * 3)`.
 
 ## Interprete
