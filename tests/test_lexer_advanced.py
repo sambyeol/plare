@@ -34,7 +34,7 @@ class NUM_A(Token):
 
 
 # Lexer that recognises lowercase words; skips newlines and horizontal whitespace.
-_word_lexer: Lexer[None] = Lexer(
+word_lexer: Lexer[None] = Lexer(
     {
         "start": [
             (r"\n", "start"),
@@ -51,7 +51,7 @@ _word_lexer: Lexer[None] = Lexer(
 
 def test_multiline_lineno() -> None:
     """Three words on separate lines each have lineno 1, 2, 3."""
-    tokens = list(_word_lexer.lex("start", "aa\nbb\ncc"))
+    tokens = list(word_lexer.lex("start", "aa\nbb\ncc"))
     assert len(tokens) == 3
     assert tokens[0].lineno == 1
     assert tokens[1].lineno == 2
@@ -60,7 +60,7 @@ def test_multiline_lineno() -> None:
 
 def test_multiline_lineno_blank_lines() -> None:
     """Blank lines between tokens still increment lineno correctly."""
-    tokens = list(_word_lexer.lex("start", "aa\n\nbb"))
+    tokens = list(word_lexer.lex("start", "aa\n\nbb"))
     assert len(tokens) == 2
     assert tokens[0].lineno == 1
     assert tokens[1].lineno == 3
@@ -68,7 +68,7 @@ def test_multiline_lineno_blank_lines() -> None:
 
 def test_second_line_offset_zero() -> None:
     """First token on a new line has offset=0 after the newline resets the column."""
-    tokens = list(_word_lexer.lex("start", "ab\ncd"))
+    tokens = list(word_lexer.lex("start", "ab\ncd"))
     assert len(tokens) == 2
     assert tokens[1].lineno == 2
     assert tokens[1].offset == 0
@@ -76,7 +76,7 @@ def test_second_line_offset_zero() -> None:
 
 def test_mid_line_offset() -> None:
     """A token after leading spaces on the same line has the correct column offset."""
-    tokens = list(_word_lexer.lex("start", "ab  cd"))
+    tokens = list(word_lexer.lex("start", "ab  cd"))
     assert len(tokens) == 2
     assert tokens[0].offset == 0
     assert tokens[1].offset == 4
@@ -84,7 +84,7 @@ def test_mid_line_offset() -> None:
 
 def test_second_line_mid_offset() -> None:
     """A token after leading spaces on line 2 has the right column offset."""
-    tokens = list(_word_lexer.lex("start", "ab\n   cd"))
+    tokens = list(word_lexer.lex("start", "ab\n   cd"))
     assert len(tokens) == 2
     assert tokens[1].lineno == 2
     assert tokens[1].offset == 3
@@ -92,7 +92,7 @@ def test_second_line_mid_offset() -> None:
 
 def test_tab_counts_as_one_column() -> None:
     """A tab character advances the column offset by exactly one."""
-    tokens = list(_word_lexer.lex("start", "\tab"))
+    tokens = list(word_lexer.lex("start", "\tab"))
     assert len(tokens) == 1
     assert tokens[0].offset == 1
 
@@ -104,7 +104,7 @@ def test_tab_counts_as_one_column() -> None:
 # Lexer with C-style /* ... */ block comments:
 #   start → on "/*" → comment state
 #   comment → on "*/" → back to start
-_block_comment_lexer: Lexer[None] = Lexer(
+block_comment_lexer: Lexer[None] = Lexer(
     {
         "start": [
             (r"/\*", "comment"),
@@ -122,7 +122,7 @@ _block_comment_lexer: Lexer[None] = Lexer(
 
 def test_block_comment_ignored() -> None:
     """/* ... */ is consumed without emitting any token."""
-    tokens = list(_block_comment_lexer.lex("start", "/* hello */ 42"))
+    tokens = list(block_comment_lexer.lex("start", "/* hello */ 42"))
     assert len(tokens) == 1
     assert isinstance(tokens[0], NUM_A)
     assert tokens[0].value == 42
@@ -130,7 +130,7 @@ def test_block_comment_ignored() -> None:
 
 def test_block_comment_between_tokens() -> None:
     """Tokens before and after a block comment are both captured."""
-    tokens = list(_block_comment_lexer.lex("start", "1 /* skip */ 2"))
+    tokens = list(block_comment_lexer.lex("start", "1 /* skip */ 2"))
     assert len(tokens) == 2
     assert isinstance(tokens[0], NUM_A) and tokens[0].value == 1
     assert isinstance(tokens[1], NUM_A) and tokens[1].value == 2
@@ -138,7 +138,7 @@ def test_block_comment_between_tokens() -> None:
 
 def test_block_comment_multiline_advances_lineno() -> None:
     """A comment spanning two lines gives the token after it lineno=2."""
-    tokens = list(_block_comment_lexer.lex("start", "/* line1\nline2 */ 99"))
+    tokens = list(block_comment_lexer.lex("start", "/* line1\nline2 */ 99"))
     assert len(tokens) == 1
     assert isinstance(tokens[0], NUM_A)
     assert tokens[0].lineno == 2
@@ -151,14 +151,14 @@ def test_block_comment_unclosed_silently_ends() -> None:
     a comment simply terminates tokenisation.  Only the token before the comment
     is emitted.
     """
-    tokens = list(_block_comment_lexer.lex("start", "1 /* unclosed"))
+    tokens = list(block_comment_lexer.lex("start", "1 /* unclosed"))
     assert len(tokens) == 1
     assert isinstance(tokens[0], NUM_A) and tokens[0].value == 1
 
 
 def test_block_comment_adjacent_to_token() -> None:
     """A comment immediately adjacent (no space) to a number is handled correctly."""
-    tokens = list(_block_comment_lexer.lex("start", "/*x*/7"))
+    tokens = list(block_comment_lexer.lex("start", "/*x*/7"))
     assert len(tokens) == 1
     assert isinstance(tokens[0], NUM_A) and tokens[0].value == 7
 
@@ -174,15 +174,15 @@ class STR(Token):
         self.content = value
 
 
-def _make_str(matched: str, state: None, lineno: int, offset: int) -> STR:
+def make_str(matched: str, state: None, lineno: int, offset: int) -> STR:
     return STR(matched[1:-1], lineno=lineno, offset=offset)
 
 
-_str_lexer: Lexer[None] = Lexer(
+str_lexer: Lexer[None] = Lexer(
     {
         "start": [
             (r"[ \t]+", "start"),
-            (r'"[^"]*"', _make_str),
+            (r'"[^"]*"', make_str),
         ]
     }
 )
@@ -190,7 +190,7 @@ _str_lexer: Lexer[None] = Lexer(
 
 def test_string_literal_single() -> None:
     """A double-quoted string produces a single STR token with inner content."""
-    tokens = list(_str_lexer.lex("start", '"hello world"'))
+    tokens = list(str_lexer.lex("start", '"hello world"'))
     assert len(tokens) == 1
     assert isinstance(tokens[0], STR)
     assert tokens[0].content == "hello world"
@@ -198,7 +198,7 @@ def test_string_literal_single() -> None:
 
 def test_string_literal_multiple() -> None:
     """Two adjacent strings produce two separate STR tokens."""
-    tokens = list(_str_lexer.lex("start", '"foo" "bar"'))
+    tokens = list(str_lexer.lex("start", '"foo" "bar"'))
     assert len(tokens) == 2
     assert isinstance(tokens[0], STR) and tokens[0].content == "foo"
     assert isinstance(tokens[1], STR) and tokens[1].content == "bar"
@@ -206,14 +206,14 @@ def test_string_literal_multiple() -> None:
 
 def test_string_literal_offset() -> None:
     """The STR token's offset points to the opening quote character."""
-    tokens = list(_str_lexer.lex("start", '   "hi"'))
+    tokens = list(str_lexer.lex("start", '   "hi"'))
     assert len(tokens) == 1
     assert tokens[0].offset == 3
 
 
 def test_string_literal_empty() -> None:
     """An empty string literal produces a STR token with content == ''."""
-    tokens = list(_str_lexer.lex("start", '""'))
+    tokens = list(str_lexer.lex("start", '""'))
     assert len(tokens) == 1
     assert isinstance(tokens[0], STR)
     assert tokens[0].content == ""
@@ -295,7 +295,7 @@ def test_single_char_token_position() -> None:
 def test_lex_error_reports_correct_position() -> None:
     """LexingError carries the correct lineno and offset of the unrecognised character."""
     with pytest.raises(LexingError) as exc_info:
-        list(_word_lexer.lex("start", "aa\nbb\n@"))
+        list(word_lexer.lex("start", "aa\nbb\n@"))
     err = exc_info.value
     assert err.lineno == 3
     assert err.offset == 0
@@ -304,7 +304,7 @@ def test_lex_error_reports_correct_position() -> None:
 def test_lex_error_mid_line_offset() -> None:
     """LexingError offset matches the column of the bad character within its line."""
     with pytest.raises(LexingError) as exc_info:
-        list(_word_lexer.lex("start", "abc @"))
+        list(word_lexer.lex("start", "abc @"))
     err = exc_info.value
     assert err.lineno == 1
     assert err.offset == 4
@@ -312,7 +312,7 @@ def test_lex_error_mid_line_offset() -> None:
 
 def test_multiple_tokens_same_line() -> None:
     """Several tokens on one line have monotonically increasing offsets."""
-    tokens = list(_word_lexer.lex("start", "ab cd ef"))
+    tokens = list(word_lexer.lex("start", "ab cd ef"))
     assert len(tokens) == 3
     assert tokens[0].offset < tokens[1].offset < tokens[2].offset
     assert tokens[0].lineno == tokens[1].lineno == tokens[2].lineno == 1

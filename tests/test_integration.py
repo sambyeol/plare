@@ -295,7 +295,7 @@ def eval_expr(node: Expr, env: dict[str, int] | None = None) -> int:
 # Lexer
 # ---------------------------------------------------------------------------
 
-_KEYWORDS: dict[str, type[Token]] = {
+KEYWORDS: dict[str, type[Token]] = {
     "let": LET,
     "in": IN,
     "if": IF,
@@ -307,8 +307,8 @@ _KEYWORDS: dict[str, type[Token]] = {
 }
 
 
-def _lex_word(matched: str, state: None, lineno: int, offset: int) -> Token:
-    cls = _KEYWORDS.get(matched, ID)
+def lex_word(matched: str, state: None, lineno: int, offset: int) -> Token:
+    cls = KEYWORDS.get(matched, ID)
     return cls(matched, lineno=lineno, offset=offset)
 
 
@@ -328,7 +328,7 @@ expr_lexer: Lexer[None] = Lexer(
             (r">", GT),
             (r"\(", LPAREN),
             (r"\)", RPAREN),
-            (r"[a-zA-Z_]\w*", _lex_word),
+            (r"[a-zA-Z_]\w*", lex_word),
         ]
     }
 )
