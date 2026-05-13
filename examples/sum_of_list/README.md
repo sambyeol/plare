@@ -20,11 +20,11 @@ list -> N::list
 ```
 
 A node in AST must initialized with `Token` objects or other node objects.
-That is, You need to define 3 different type of list, which are initialized with different arguments, to support the arbitrary length of list: `IntList`, `SingleIntList`, and `EmptyIntList`.
+That is, you need to define 3 different types of list, which are initialized with different arguments, to support the arbitrary length of list: `IntList`, `SingleIntList`, and `EmptyIntList`.
 
 ## Defining Lexer
 A lexer will tokenize the given source string.
-To make a lexer you only have to do is make tokens that inherits`Token` class.
+To make a lexer, all you need to do is define token classes that inherit from `Token`.
 In this example, you only need to define 4 tokens: `COMMA`, `LBRACKET`, `RBRACKET`, and `NUM`.
 
 ## Defining Parser
