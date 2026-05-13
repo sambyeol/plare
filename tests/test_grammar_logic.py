@@ -241,7 +241,7 @@ def test_calc_mixed_left_assoc_same_precedence() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Section 2: Default S/R conflict is left-associative
+# Section 2: Explicit left-assoc declaration causes reduce to win in S/R conflict
 # ---------------------------------------------------------------------------
 
 
@@ -252,7 +252,7 @@ class NUM_SR(Token):
 
 
 class PLUS_SR(Token):
-    pass  # no precedence set → default 0, associative="left"
+    associative = "left"
 
 
 class NumSR:
@@ -267,15 +267,14 @@ class AddSR:
 
 
 def test_default_sr_conflict_is_left_associative() -> None:
-    """With no explicit precedence, S/R conflict resolves to reduce (left-associative).
+    """With explicit associative="left", S/R conflict resolves to reduce (left-associative).
 
     When both item.precedence and symbol.precedence are 0, the parser condition:
         item.precedence == symbol.precedence and symbol.associative == "left"
-    is True (Token default associative="left"), so reduce wins.
+    is True, so reduce wins.
 
     This means 1 + 2 + 3 produces a LEFT-leaning tree AddSR(AddSR(1, 2), 3),
-    not a right-leaning one. The existing test_shift_reduce_resolution_prefers_shift
-    only tests the two-token case and makes no tree-shape assertion.
+    not a right-leaning one.
     """
     p = Parser(
         {
@@ -349,13 +348,6 @@ class IfThenElseD(StmtD):
         self.else_ = else_
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Default S/R resolution reduces (not shifts) when both precedences are 0 "
-        "and associative='left': else binds to the outer if instead of the inner if "
-        "as most languages (C, Java) expect."
-    )
-)
 def test_dangling_else_inner_if_gets_else() -> None:
     """The dangling-else problem: 'if c1 then if c2 then s1 else s2'.
 
