@@ -50,7 +50,8 @@ def make_positive_integer_parser() -> Parser[Tree]:
             "num": [
                 ([NUM], Num, [0]),
             ],
-        }
+        },
+        cache_dir=None,
     )
 
 
@@ -62,7 +63,7 @@ def test_parse_positive_integer_without_add():
 
 
 def test_minimal_empty_rule_parser():
-    parser = Parser({"pgm": [([], list[int], [])]})
+    parser = Parser({"pgm": [([], list[int], [])]}, cache_dir=None)
     parsed = parser.parse("pgm", [])
     assert isinstance(parsed, list)
     assert len(parsed) == 0
@@ -102,7 +103,8 @@ def make_list_parser() -> Parser[IntList]:
                 ([NUM, COMMA, "items"], IntList, [0, 1]),
                 ([], EmptyIntList, []),
             ],
-        }
+        },
+        cache_dir=None,
     )
 
 

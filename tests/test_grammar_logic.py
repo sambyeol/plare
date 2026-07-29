@@ -139,7 +139,7 @@ CALC_LEXER = Lexer(
     }
 )
 
-calc_parser = Parser(CALC_GRAMMAR)
+calc_parser = Parser(CALC_GRAMMAR, cache_dir=None)
 
 
 def num(v: int, o: int = 0) -> NUM_C:
@@ -282,7 +282,8 @@ def test_default_sr_conflict_is_left_associative() -> None:
                 (["expr", PLUS_SR, "expr"], AddSR, [0, 2]),
                 ([NUM_SR], NumSR, [0]),
             ]
-        }
+        },
+        cache_dir=None,
     )
     result = p.parse(
         "expr",
@@ -371,7 +372,8 @@ def test_dangling_else_inner_if_gets_else() -> None:
                 ([IF_D, BASE_D, THEN_D, "stmt"], IfThenD, [1, 3]),
                 ([BASE_D], BaseStmtD, [0]),
             ]
-        }
+        },
+        cache_dir=None,
     )
     tokens = [
         IF_D("if", lineno=1, offset=0),
@@ -459,7 +461,8 @@ unary_parser = Parser(
             (["expr", STAR_UP, "expr"], MulUP, [0, 2]),
             ([MINUS_UP, "expr"], NegUP, [1], UMINUS_UP),  # prec override → 3
         ]
-    }
+    },
+    cache_dir=None,
 )
 
 
@@ -559,7 +562,7 @@ LIST_GRAMMAR: GrammarDict[ListL | EmptyListL | ConsItemsL | SingleItemL] = {
         ([NUM_L], SingleItemL, [0]),
     ],
 }
-list_parser = Parser(LIST_GRAMMAR)
+list_parser = Parser(LIST_GRAMMAR, cache_dir=None)
 
 
 def num_l(v: int, o: int = 0) -> NUM_L:
@@ -673,7 +676,7 @@ CALL_GRAMMAR: GrammarDict[CallF | NoArgCallF | ConsArgsF | SingleArgF] = {
         ([NUM_F], SingleArgF, [0]),
     ],
 }
-call_parser = Parser(CALL_GRAMMAR)
+call_parser = Parser(CALL_GRAMMAR, cache_dir=None)
 
 
 def num_f(v: int, o: int = 0) -> NUM_F:
@@ -859,7 +862,7 @@ PROGRAM_GRAMMAR: GrammarDict[ProgramE | NonEmptyStmtsE | EmptyStmtsE] = {
         ([], EmptyStmtsE, []),
     ],
 }
-program_parser = Parser(PROGRAM_GRAMMAR)
+program_parser = Parser(PROGRAM_GRAMMAR, cache_dir=None)
 
 
 def test_empty_program() -> None:

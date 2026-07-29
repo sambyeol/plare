@@ -53,7 +53,7 @@ def make_tok(cls: type[Token], *, lineno: int = 1, offset: int = 0) -> Token:
 
 def test_parsing_error_unexpected_token_fields() -> None:
     """ParsingError carries the offending token, its position, and expected classes."""
-    p: Parser[Expr] = Parser(GRAMMAR)
+    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
     wrong_tok = make_tok(Plus, lineno=3, offset=7)
 
     with pytest.raises(ParsingError) as exc_info:
@@ -68,7 +68,7 @@ def test_parsing_error_unexpected_token_fields() -> None:
 
 def test_parsing_error_unexpected_token_str() -> None:
     """str(ParsingError) starts with the 'Line X, col Y:' prefix."""
-    p: Parser[Expr] = Parser(GRAMMAR)
+    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
     wrong_tok = make_tok(Plus, lineno=2, offset=5)
 
     with pytest.raises(ParsingError) as exc_info:
@@ -86,7 +86,7 @@ def test_parsing_error_unexpected_token_str() -> None:
 
 def test_parsing_error_truncated_input_expected_nonempty() -> None:
     """When input is too short, ParsingError.expected is non-empty."""
-    p: Parser[Expr] = Parser(GRAMMAR)
+    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
     num_tok = make_tok(Num, lineno=1, offset=0)
 
     with pytest.raises(ParsingError) as exc_info:
@@ -99,7 +99,7 @@ def test_parsing_error_truncated_input_expected_nonempty() -> None:
 
 def test_parsing_error_truncated_input_str() -> None:
     """str(ParsingError) for truncated input contains the expected class name."""
-    p: Parser[Expr] = Parser(GRAMMAR)
+    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
     num_tok = make_tok(Num, lineno=1, offset=0)
 
     with pytest.raises(ParsingError) as exc_info:

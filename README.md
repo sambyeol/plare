@@ -10,6 +10,7 @@ classes and dictionaries — no code generation, no external grammar files.
   modes mid-stream (e.g., to skip comments)
 - **LALR(1) parser** — efficient shift/reduce parser with automatic conflict
   detection
+- **Persistent parse-table cache** — automatically skip repeated LALR table construction
 - **Operator precedence** — resolve shift/reduce conflicts by setting
   `precedence` and `associative` class variables on token classes
 - **No build step** — install and import
