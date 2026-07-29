@@ -29,13 +29,10 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Iterable, Protocol, TypeGuard, cast
 
-from plare import __version__ as PLARE_VERSION
+import plare
 from plare.exception import ParserError, ParsingError
 from plare.token import Token
 from plare.utils import logger
-
-PARSER_TABLE_CACHE_VERSION = PLARE_VERSION
-"""Plare version used to validate on-disk parse tables."""
 
 
 class EOS(Token):
@@ -961,7 +958,7 @@ def encode_parse_table_cache[T](
         "table": rows,
     }
     return {
-        "version": PARSER_TABLE_CACHE_VERSION,
+        "version": plare.__version__,
         "grammar": fingerprint,
         "checksum": cache_digest(data),
         "data": data,
@@ -976,7 +973,7 @@ def decode_parse_table_cache[T](
     entry_names: list[str],
 ) -> tuple[Table[T], dict[str, int]]:
     payload = cache_dict(raw)
-    if cache_str(payload.get("version")) != PARSER_TABLE_CACHE_VERSION:
+    if cache_str(payload.get("version")) != plare.__version__:
         raise StaleParseTableCache("cache version mismatch")
     if cache_str(payload.get("grammar")) != fingerprint:
         raise StaleParseTableCache("grammar mismatch")

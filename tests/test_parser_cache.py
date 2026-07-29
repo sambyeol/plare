@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
+import plare
 import plare.parser as parser_module
-from plare import __version__ as PLARE_VERSION
 from plare.parser import Parser
 from plare.token import Token
 
@@ -86,10 +86,10 @@ def test_cache_version_follows_plare_version(
     cache_file = only_cache_file(cache_dir)
     payload = json.loads(cache_file.read_text(encoding="utf-8"))
 
-    assert parser_module.PARSER_TABLE_CACHE_VERSION == PLARE_VERSION
-    assert payload["version"] == PLARE_VERSION
+    assert "PARSER_TABLE_CACHE_VERSION" not in vars(parser_module)
+    assert payload["version"] == plare.__version__
 
-    monkeypatch.setattr(parser_module, "PARSER_TABLE_CACHE_VERSION", "999.0.0")
+    monkeypatch.setattr(plare, "__version__", "999.0.0")
     rebuilt = Parser(expression_grammar(), cache_dir=cache_dir)
     rewritten = json.loads(cache_file.read_text(encoding="utf-8"))
 
