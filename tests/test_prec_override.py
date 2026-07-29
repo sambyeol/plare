@@ -89,7 +89,8 @@ def parser_with_prec_override() -> Parser[Expr]:
                 (["expr", STAR, "expr"], Mul, [0, 2]),
                 ([MINUS, "expr"], Neg, [1], UMINUS),
             ]
-        }
+        },
+        cache_dir=None,
     )
 
 
@@ -102,7 +103,8 @@ def parser_without_prec_override() -> Parser[Expr]:
                 (["expr", STAR, "expr"], Mul, [0, 2]),
                 ([MINUS, "expr"], Neg, [1]),
             ]
-        }
+        },
+        cache_dir=None,
     )
 
 
@@ -199,7 +201,7 @@ def test_rr_equal_precedence_first_defined_wins() -> None:
         "first_val": [([Lit], None, [0])],
         "second_val": [([Lit], None, [0])],
     }
-    parser = Parser(grammar)
+    parser = Parser(grammar, cache_dir=None)
     result = parser.parse("result", [Lit("x", lineno=1, offset=0)])
     assert isinstance(
         result, FirstResult

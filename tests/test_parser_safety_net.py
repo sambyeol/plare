@@ -69,7 +69,7 @@ def test_epsilon_optional_suffix() -> None:
             ([], NoLabel, []),
         ],
     }
-    p = Parser(grammar)
+    p = Parser(grammar, cache_dir=None)
 
     result_no = p.parse(
         "stmt",
@@ -138,7 +138,7 @@ def test_left_recursive_addition_chain() -> None:
         ],
         "num": [([NUM2], Num2, [0])],
     }
-    p = Parser(grammar)
+    p = Parser(grammar, cache_dir=None)
 
     result = p.parse(
         "expr",
@@ -204,7 +204,7 @@ def test_right_recursive_cons_list() -> None:
         ],
         "num": [([NUM3], Num3, [0])],
     }
-    p = Parser(grammar)
+    p = Parser(grammar, cache_dir=None)
 
     result = p.parse(
         "list",
@@ -284,7 +284,8 @@ def test_operator_precedence_mul_over_add() -> None:
                 (["expr", STAR4, "expr"], Mul4, [0, 2]),
                 ([NUM4], Num4, [0]),
             ]
-        }
+        },
+        cache_dir=None,
     )
 
     # 1 + 2 * 3  →  Add4(Num4(1), Mul4(Num4(2), Num4(3)))
@@ -352,7 +353,8 @@ def test_left_associative_subtraction() -> None:
                 (["expr", MINUS5, "expr"], Sub5, [0, 2]),
                 ([NUM5], Num5, [0]),
             ]
-        }
+        },
+        cache_dir=None,
     )
 
     # 1 - 2 - 3  →  Sub5(Sub5(Num5(1), Num5(2)), Num5(3))
@@ -420,7 +422,8 @@ def test_right_associative_exponentiation() -> None:
                 (["expr", POW6, "expr"], Pow6, [0, 2]),
                 ([NUM6], Num6, [0]),
             ]
-        }
+        },
+        cache_dir=None,
     )
 
     # 2 ^ 3 ^ 4  →  Pow6(Num6(2), Pow6(Num6(3), Num6(4)))
@@ -484,7 +487,7 @@ def test_multiple_entry_points() -> None:
         "str_expr": [([WORD7], StrVal, [0])],
         "int_expr": [([NUM7], IntVal, [0])],
     }
-    p = Parser(grammar)
+    p = Parser(grammar, cache_dir=None)
 
     str_result = p.parse("str_expr", [WORD7("hello", lineno=1, offset=0)])
     assert isinstance(str_result, StrVal)
@@ -543,7 +546,8 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
                 (["expr", PLUS8, "expr"], Add8, [0, 2]),
                 ([NUM8], Num8, [0]),
             ]
-        }
+        },
+        cache_dir=None,
     )
 
     result = p.parse(
@@ -622,7 +626,8 @@ def test_lalr1_resolves_rr_conflict_variant_1() -> None:
             ],
             "A_nt": [([E8x], None, [0])],
             "B_nt": [([E8x], None, [0])],
-        }
+        },
+        cache_dir=None,
     )
     result = p.parse(
         "start",
@@ -682,7 +687,8 @@ def test_lalr1_resolves_rr_conflict_variant_2() -> None:
             ],
             "X_nt": [([T8y], None, [0])],
             "Y_nt": [([T8y], None, [0])],
-        }
+        },
+        cache_dir=None,
     )
     result = p.parse(
         "start2",

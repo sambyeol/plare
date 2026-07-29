@@ -365,7 +365,8 @@ expr_parser: Parser[Expr] = Parser(
             ([IF, "expr", THEN, "expr", ELSE, "expr"], IfExpr, [1, 3, 5]),
             ([LET, ID, EQ, "expr", IN, "expr"], LetExpr, [1, 3, 5]),
         ]
-    }
+    },
+    cache_dir=None,
 )
 
 # ---------------------------------------------------------------------------

@@ -102,8 +102,8 @@ def make_expr_grammar() -> Grammar:
 
 def test_parser_entry_state_is_deterministic() -> None:
     """Two Parser instances built from identical grammars have the same entry_state."""
-    p1 = Parser(make_expr_grammar())
-    p2 = Parser(make_expr_grammar())
+    p1 = Parser(make_expr_grammar(), cache_dir=None)
+    p2 = Parser(make_expr_grammar(), cache_dir=None)
     assert p1.entry_state == p2.entry_state
 
 
@@ -113,8 +113,8 @@ def test_parser_table_actions_are_deterministic() -> None:
     Compares every cell by its string representation so the test does not rely
     on Action subclass identity.
     """
-    p1 = Parser(make_expr_grammar())
-    p2 = Parser(make_expr_grammar())
+    p1 = Parser(make_expr_grammar(), cache_dir=None)
+    p2 = Parser(make_expr_grammar(), cache_dir=None)
 
     assert len(p1.table.table) == len(p2.table.table), "table row count differs"
     for state_id, (row1, row2) in enumerate(zip(p1.table.table, p2.table.table)):
@@ -174,7 +174,7 @@ def test_parser_build_time_large_grammar() -> None:
     """
     grammar = make_chain_grammar(50)
     start = time.perf_counter()
-    p = Parser(grammar)
+    p = Parser(grammar, cache_dir=None)
     elapsed = time.perf_counter() - start
     assert p.entry_state, "parser must have at least one entry state"
     print(f"\nLarge grammar (50 levels) build time: {elapsed * 1000:.1f} ms")

@@ -10,7 +10,7 @@ classes and dictionaries — no code generation, no external grammar files.
   modes mid-stream (e.g., to skip comments)
 - **LALR(1) parser** — efficient shift/reduce parser with automatic conflict
   detection
-- **Persistent parse-table cache** — opt in to skip repeated LALR table construction
+- **Persistent parse-table cache** — automatically skip repeated LALR table construction
 - **Operator precedence** — resolve shift/reduce conflicts by setting
   `precedence` and `associative` class variables on token classes
 - **No build step** — install and import
@@ -42,13 +42,15 @@ parser = Parser({"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0]
 
 ## Parse-table cache
 
-Pass a cache file path when constructing a parser to reuse its generated LALR table across process runs:
+Plare automatically caches generated LALR tables in `<project_root>/.plare`, treating the current working directory as the project root. Each grammar uses its own fingerprinted JSON file, and compatible tables are reused across process runs:
 
 ```python
-parser = Parser(grammar, cache_path=".cache/plare/expressions.json")
+parser = Parser(grammar)
 ```
 
-Plare creates missing parent directories and writes the cache atomically. Grammar structure, rule order, token precedence or associativity, and `%prec` changes automatically invalidate it; corrupt or unreadable cache files are ignored and rebuilt. Semantic action classes and argument lists are always taken from the current grammar rather than the cached file.
+Pass `cache_dir=None` to disable caching or provide another directory with `cache_dir="path/to/cache"`.
+
+Plare creates missing cache directories and writes each table atomically. Grammar structure, rule order, token precedence or associativity, `%prec`, and the Plare version automatically determine cache compatibility; corrupt or unreadable cache files are ignored and rebuilt. Semantic action classes and argument lists are always taken from the current grammar rather than the cached file.
 
 ## Examples
 
