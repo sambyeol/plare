@@ -12,18 +12,29 @@ Construction pipeline (``Parser.__init__``):
     4. Compute LALR(1) per-item lookahead sets (ASU §9.6).
     5. Populate the action/goto table; resolve shift/reduce and reduce/reduce
        conflicts using token precedence and associativity.
+
+When ``cache_path`` points to a compatible table, construction stops after
+grammar normalization and rebinds the cached actions to the current classes.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
+import os
 from collections import deque
 from collections.abc import Mapping, Sequence
 from itertools import chain
-from typing import Iterable, Protocol, TypeGuard
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Iterable, Protocol, TypeGuard, cast
 
 from plare.exception import ParserError, ParsingError
 from plare.token import Token
 from plare.utils import logger
+
+PARSE_TABLE_CACHE_VERSION = 1
+"""Version of the on-disk parse-table schema and parser-building algorithm."""
 
 
 class EOS(Token):
@@ -799,6 +810,330 @@ def compute_lalr1_lookaheads[T](
     return lookahead_table
 
 
+class InvalidParseTableCache(ValueError):
+    """Internal signal for a stale, corrupt, or incompatible cache file."""
+
+
+class StaleParseTableCache(InvalidParseTableCache):
+    """Internal signal for a valid cache built for another grammar or version."""
+
+
+def _cache_digest(value: object) -> str:
+    """Return a deterministic SHA-256 digest for a JSON-compatible value."""
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _cache_list(value: object) -> list[object]:
+    if not isinstance(value, list):
+        raise InvalidParseTableCache("expected a list")
+    return cast(list[object], value)
+
+
+def _cache_dict(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise InvalidParseTableCache("expected an object with string keys")
+    mapping = cast(dict[object, object], value)
+    if not all(isinstance(key, str) for key in mapping):
+        raise InvalidParseTableCache("expected an object with string keys")
+    return cast(dict[str, object], mapping)
+
+
+def _cache_int(value: object) -> int:
+    if type(value) is not int:
+        raise InvalidParseTableCache("expected an integer")
+    return value
+
+
+def _cache_str(value: object) -> str:
+    if not isinstance(value, str):
+        raise InvalidParseTableCache("expected a string")
+    return value
+
+
+def _encode_cache_symbol(
+    symbol: Symbol, token_ids: dict[type[Token], int]
+) -> list[str | int]:
+    if symbol is EOS:
+        return ["eos"]
+    if isinstance(symbol, type):
+        return ["token", token_ids[symbol]]
+    return ["nonterminal", symbol]
+
+
+def _decode_cache_symbol(value: object, tokens: list[type[Token]]) -> Symbol:
+    encoded = _cache_list(value)
+    if not encoded:
+        raise InvalidParseTableCache("empty symbol")
+    kind = _cache_str(encoded[0])
+    if kind == "eos" and len(encoded) == 1:
+        return EOS
+    if kind == "token" and len(encoded) == 2:
+        token_id = _cache_int(encoded[1])
+        if 0 <= token_id < len(tokens):
+            return tokens[token_id]
+    if kind == "nonterminal" and len(encoded) == 2:
+        return _cache_str(encoded[1])
+    raise InvalidParseTableCache("invalid symbol")
+
+
+def _encode_cache_action[T](action: Action[T] | None) -> list[str | int]:
+    match action:
+        case Shift(next=next_state):
+            return ["shift", next_state]
+        case Reduce(definition_index=definition_index):
+            return ["reduce", definition_index]
+        case Accept(symbol=symbol):
+            return ["accept", symbol]
+        case Goto(next=next_state):
+            return ["goto", next_state]
+        case _:
+            raise ValueError(f"Unsupported parse-table action: {action}")
+
+
+def _copy_reduce[T](reduction: Reduce[T]) -> Reduce[T]:
+    """Return a distinct reduce action bound to the same current-grammar maker."""
+    return Reduce(
+        reduction.left,
+        reduction.n,
+        reduction.maker,
+        reduction.precedence,
+        reduction.definition_index,
+    )
+
+
+def _decode_cache_action[T](
+    value: object,
+    state_count: int,
+    reductions: dict[int, Reduce[T]],
+    entry_names: list[str],
+) -> Action[T]:
+    encoded = _cache_list(value)
+    if len(encoded) != 2:
+        raise InvalidParseTableCache("invalid action")
+    kind = _cache_str(encoded[0])
+    target = encoded[1]
+    if kind in {"shift", "goto"}:
+        next_state = _cache_int(target)
+        if not 0 <= next_state < state_count:
+            raise InvalidParseTableCache("state target out of range")
+        return Shift(next_state) if kind == "shift" else Goto(next_state)
+    if kind == "reduce":
+        definition_index = _cache_int(target)
+        try:
+            return _copy_reduce(reductions[definition_index])
+        except KeyError:
+            raise InvalidParseTableCache("unknown production") from None
+    if kind == "accept":
+        symbol = _cache_str(target)
+        if symbol not in entry_names:
+            raise InvalidParseTableCache("unknown accept symbol")
+        return Accept(symbol)
+    raise InvalidParseTableCache("unknown action")
+
+
+def _encode_parse_table_cache[T](
+    fingerprint: str,
+    table: Table[T],
+    entry_state: dict[str, int],
+    token_ids: dict[type[Token], int],
+) -> dict[str, object]:
+    rows: list[object] = []
+    for row in table.table:
+        rows.append(
+            [
+                [
+                    _encode_cache_symbol(symbol, token_ids),
+                    _encode_cache_action(action),
+                ]
+                for symbol, action in row.items()
+            ]
+        )
+    data: dict[str, object] = {
+        "entry_state": entry_state,
+        "table": rows,
+    }
+    return {
+        "version": PARSE_TABLE_CACHE_VERSION,
+        "grammar": fingerprint,
+        "checksum": _cache_digest(data),
+        "data": data,
+    }
+
+
+def _decode_parse_table_cache[T](
+    raw: object,
+    fingerprint: str,
+    tokens: list[type[Token]],
+    reductions: dict[int, Reduce[T]],
+    entry_names: list[str],
+) -> tuple[Table[T], dict[str, int]]:
+    payload = _cache_dict(raw)
+    if _cache_int(payload.get("version")) != PARSE_TABLE_CACHE_VERSION:
+        raise StaleParseTableCache("cache version mismatch")
+    if _cache_str(payload.get("grammar")) != fingerprint:
+        raise StaleParseTableCache("grammar mismatch")
+
+    data = _cache_dict(payload.get("data"))
+    if _cache_str(payload.get("checksum")) != _cache_digest(data):
+        raise InvalidParseTableCache("checksum mismatch")
+
+    encoded_rows = _cache_list(data.get("table"))
+    state_count = len(encoded_rows)
+    encoded_entry_state = _cache_dict(data.get("entry_state"))
+    if set(encoded_entry_state) != set(entry_names):
+        raise InvalidParseTableCache("entry symbols mismatch")
+    entry_state: dict[str, int] = {}
+    for symbol in entry_names:
+        state = _cache_int(encoded_entry_state[symbol])
+        if not 0 <= state < state_count:
+            raise InvalidParseTableCache("entry state out of range")
+        entry_state[symbol] = state
+
+    table = Table[T](state_count)
+    for state, encoded_row in enumerate(encoded_rows):
+        for encoded_cell in _cache_list(encoded_row):
+            cell = _cache_list(encoded_cell)
+            if len(cell) != 2:
+                raise InvalidParseTableCache("invalid table cell")
+            symbol = _decode_cache_symbol(cell[0], tokens)
+            action = _decode_cache_action(cell[1], state_count, reductions, entry_names)
+            if isinstance(symbol, type):
+                if isinstance(action, Goto):
+                    raise InvalidParseTableCache("goto action for a token")
+            else:
+                if symbol not in entry_names:
+                    raise InvalidParseTableCache("unknown nonterminal")
+                if not isinstance(action, Goto):
+                    raise InvalidParseTableCache("non-goto action for a nonterminal")
+            if symbol in table.table[state]:
+                raise InvalidParseTableCache("duplicate table cell")
+            table.table[state][symbol] = action
+    return table, entry_state
+
+
+def _load_parse_table_cache[T](
+    path: Path,
+    fingerprint: str,
+    tokens: list[type[Token]],
+    reductions: dict[int, Reduce[T]],
+    entry_names: list[str],
+) -> tuple[Table[T], dict[str, int]] | None:
+    try:
+        with path.open(encoding="utf-8") as cache_file:
+            raw = cast(object, json.load(cache_file))
+        return _decode_parse_table_cache(
+            raw, fingerprint, tokens, reductions, entry_names
+        )
+    except FileNotFoundError:
+        return None
+    except StaleParseTableCache as error:
+        logger.info("Rebuilding stale parse-table cache %s: %s", path, error)
+        return None
+    except (OSError, RecursionError, UnicodeDecodeError, ValueError) as error:
+        logger.warning("Ignoring parse-table cache %s: %s", path, error)
+        return None
+
+
+def _parse_table_cache_identity[T](
+    rules: list[Rule[T]],
+) -> tuple[str, list[type[Token]], dict[type[Token], int]]:
+    """Build the grammar fingerprint and terminal registry used by the cache."""
+    tokens: list[type[Token]] = []
+    token_ids: dict[type[Token], int] = {}
+    encoded_rules: list[object] = []
+    for rule in rules:
+        encoded_productions: list[object] = []
+        for right, _, prec_override in rule.rights:
+            encoded_right: list[object] = []
+            for symbol in right:
+                if isinstance(symbol, type):
+                    if symbol not in token_ids:
+                        token_ids[symbol] = len(tokens)
+                        tokens.append(symbol)
+                    encoded_right.append(["token", token_ids[symbol]])
+                else:
+                    encoded_right.append(["nonterminal", symbol])
+            encoded_productions.append(
+                {
+                    "right": encoded_right,
+                    "precedence": prec_override,
+                }
+            )
+        encoded_rules.append(
+            {
+                "left": rule.left,
+                "productions": encoded_productions,
+            }
+        )
+
+    token_descriptors = [
+        {
+            "module": token.__module__,
+            "qualname": token.__qualname__,
+            "name": token.__name__,
+            "precedence": token.precedence,
+            "associative": token.associative,
+        }
+        for token in tokens
+    ]
+    fingerprint = _cache_digest(
+        {
+            "rules": encoded_rules,
+            "tokens": token_descriptors,
+        }
+    )
+    return fingerprint, tokens, token_ids
+
+
+def _write_parse_table_cache[T](
+    path: Path,
+    fingerprint: str,
+    table: Table[T],
+    entry_state: dict[str, int],
+    token_ids: dict[type[Token], int],
+) -> None:
+    temporary_path: Path | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _encode_parse_table_cache(fingerprint, table, entry_state, token_ids)
+        with NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as cache_file:
+            temporary_path = Path(cache_file.name)
+            json.dump(
+                payload,
+                cache_file,
+                ensure_ascii=False,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            cache_file.flush()
+            os.fsync(cache_file.fileno())
+        os.replace(temporary_path, path)
+        temporary_path = None
+    except (KeyError, OSError, TypeError, ValueError) as error:
+        logger.warning("Unable to write parse-table cache %s: %s", path, error)
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 class Parser[T]:
     """LALR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
@@ -822,14 +1157,20 @@ class Parser[T]:
         through a single child unchanged.
       * ``arg_indices``: which RHS children to forward to ``action_type.__init__``.
 
+    Pass ``cache_path`` to persist the generated table. Compatible cache files
+    are rebound to the current grammar's token and semantic-action classes.
+
     Attributes:
         table: The completed LR action/goto table.
         entry_state: Mapping from non-terminal name → initial state id for that
             entry point (one entry point per top-level key in the grammar).
+        cache_hit: Whether this instance loaded its parse table from
+            ``cache_path`` instead of building it.
     """
 
     table: Table[T]
     entry_state: dict[str, int]
+    cache_hit: bool
 
     def __init__(
         self,
@@ -842,6 +1183,8 @@ class Parser[T]:
                 ]
             ],
         ],
+        *,
+        cache_path: str | os.PathLike[str] | None = None,
     ) -> None:
         # ── Phase 1: Augment grammar ─────────────────────────────────────────
         # For each entry non-terminal X, add an augmented rule
@@ -857,6 +1200,7 @@ class Parser[T]:
         # definition_index (global counter) so equal-precedence R/R conflicts
         # can be resolved by definition order.
         rules: dict[str, Rule[T]] = {}
+        user_rules: list[Rule[T]] = []
         entry_rules: list[tuple[StartVariable, Rule[T]]] = []
         start_variables: set[StartVariable] = set()
         global_idx = 0
@@ -867,13 +1211,15 @@ class Parser[T]:
             for entry in productions:
                 if len(entry) == 4:
                     right, action, args, prec_token = entry
-                    norm_rights.append(
-                        (list(right), action, args, prec_token.precedence)
-                    )
+                    prec_override = prec_token.precedence
                 else:
                     right, action, args = entry
-                    norm_rights.append((list(right), action, args, None))
-            rules[left] = Rule[T](left, norm_rights, global_idx)
+                    prec_override = None
+                normalized_right = list(right)
+                norm_rights.append((normalized_right, action, args, prec_override))
+            rule = Rule[T](left, norm_rights, global_idx)
+            rules[left] = rule
+            user_rules.append(rule)
             start_var = StartVariable(left)
             augmented = Rule[T](start_var, [([left], None, [0], None)], 0)
             rules[start_var] = augmented
@@ -881,16 +1227,54 @@ class Parser[T]:
             start_variables.add(start_var)
             global_idx += len(norm_rights)
 
+        reductions: dict[int, Reduce[T]] = {}
+        for rule in user_rules:
+            for (right, maker, prec_override), definition_index in zip(
+                rule.rights, rule.definition_indices
+            ):
+                item = Item(
+                    rule.left,
+                    right,
+                    maker,
+                    definition_index,
+                    prec_override=prec_override,
+                )
+                reductions[definition_index] = Reduce(
+                    rule.left,
+                    len(right),
+                    maker,
+                    item.precedence,
+                    definition_index,
+                )
+
+        self.cache_hit = False
+        cache_file = Path(cache_path) if cache_path is not None else None
+        cache_fingerprint: str | None = None
+        cache_token_ids: dict[type[Token], int] = {}
+        entry_names = [left.orig for left, _ in entry_rules]
+        if cache_file is not None:
+            cache_fingerprint, cache_tokens, cache_token_ids = (
+                _parse_table_cache_identity(user_rules)
+            )
+            cached = _load_parse_table_cache(
+                cache_file,
+                cache_fingerprint,
+                cache_tokens,
+                reductions,
+                entry_names,
+            )
+            if cached is not None:
+                self.table, self.entry_state = cached
+                self.cache_hit = True
+                logger.info("Parser loaded from cache: %s", cache_file)
+                return
+
         # ── Phase 2: Compute FIRST sets ──────────────────────────────────────
         # FIRST(A) is needed to propagate ε through nullable non-terminals
         # during LALR(1) lookahead propagation in Phase 4.
         first_sets = compute_first_sets(rules)
 
         all_items = {left: rule.items for left, rule in rules.items()}
-        all_tokens = set[type[Token]]()
-        for rule in rules.values():
-            for right, _, _ in rule.rights:
-                all_tokens.update(t for t in right if isinstance(t, type))
 
         # ── Phase 3: Build LR(0) canonical collection ────────────────────────
         # BFS over the LR(0) automaton.  ``state_index`` maps a frozenset of
@@ -979,12 +1363,8 @@ class Parser[T]:
                         )
                     else:
                         for symbol in state.lookaheads.get(item, set()):
-                            reduce_action = Reduce(
-                                item.left,
-                                len(item.right),
-                                item.maker,
-                                item.precedence,
-                                item.definition_index,
+                            reduce_action = _copy_reduce(
+                                reductions[item.definition_index]
                             )
                             try:
                                 self.table[state.id, symbol] = reduce_action
@@ -1018,6 +1398,14 @@ class Parser[T]:
                                         self.table.resolve_conflict(
                                             state.id, symbol, reduce_action
                                         )
+        if cache_file is not None and cache_fingerprint is not None:
+            _write_parse_table_cache(
+                cache_file,
+                cache_fingerprint,
+                self.table,
+                self.entry_state,
+                cache_token_ids,
+            )
         logger.info("Parser created")
 
     def parse(self, var: str, lexbuf: Iterable[Token]) -> T | Token:

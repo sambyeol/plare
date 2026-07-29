@@ -10,6 +10,7 @@ classes and dictionaries — no code generation, no external grammar files.
   modes mid-stream (e.g., to skip comments)
 - **LALR(1) parser** — efficient shift/reduce parser with automatic conflict
   detection
+- **Persistent parse-table cache** — opt in to skip repeated LALR table construction
 - **Operator precedence** — resolve shift/reduce conflicts by setting
   `precedence` and `associative` class variables on token classes
 - **No build step** — install and import
@@ -38,6 +39,16 @@ class PLUS(Token):
 lexer = Lexer({"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start")]})
 parser = Parser({"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]})
 ```
+
+## Parse-table cache
+
+Pass a cache file path when constructing a parser to reuse its generated LALR table across process runs:
+
+```python
+parser = Parser(grammar, cache_path=".cache/plare/expressions.json")
+```
+
+Plare creates missing parent directories and writes the cache atomically. Grammar structure, rule order, token precedence or associativity, and `%prec` changes automatically invalidate it; corrupt or unreadable cache files are ignored and rebuilt. Semantic action classes and argument lists are always taken from the current grammar rather than the cached file.
 
 ## Examples
 
