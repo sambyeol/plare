@@ -40,18 +40,6 @@ lexer = Lexer({"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start")]})
 parser = Parser({"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]})
 ```
 
-## Parse-table cache
-
-Plare automatically caches generated LALR tables in `<project_root>/.plare`, treating the current working directory as the project root. Each grammar uses its own fingerprinted JSON file, and compatible tables are reused across process runs:
-
-```python
-parser = Parser(grammar)
-```
-
-Pass `cache_dir=None` to disable caching or provide another directory with `cache_dir="path/to/cache"`.
-
-Plare creates missing cache directories and writes each table atomically. Grammar structure, rule order, token precedence or associativity, `%prec`, and the Plare version automatically determine cache compatibility; corrupt or unreadable cache files are ignored and rebuilt. Semantic action classes and argument lists are always taken from the current grammar rather than the cached file.
-
 ## Examples
 
 - [`examples/calc/`](examples/calc/) — integer arithmetic with operator precedence
