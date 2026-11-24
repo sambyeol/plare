@@ -133,8 +133,8 @@ class Item[T]:
 
     ``definition_index`` is the zero-based ordinal assigned to this production
     during grammar construction (counting across all non-terminals in definition
-    order).  It is used to break ties when two reduce actions have equal
-    precedence: the production with the lower index wins.
+    order).  It distinguishes declarations with the same LHS and RHS.  When
+    two reduce actions have equal precedence, the lower index wins.
 
     Attributes:
         left: The non-terminal on the LHS of the rule.
@@ -215,7 +215,7 @@ class Item[T]:
         return f"{self.left} {arrow} {before_dot} . {after_dot}"
 
     def __hash__(self) -> int:
-        return hash((self.left, tuple(self.right), self.loc))
+        return hash((self.left, tuple(self.right), self.loc, self.definition_index))
 
     def __eq__(self, value: object) -> bool:
         return (
@@ -223,6 +223,7 @@ class Item[T]:
             and self.left == value.left
             and self.right == value.right
             and self.loc == value.loc
+            and self.definition_index == value.definition_index
         )
 
 
@@ -1067,12 +1068,15 @@ def parse_table_cache_identity[T](
                     "precedence": prec_override,
                 }
             )
-        encoded_rules.append(
-            {
-                "left": rule.left,
-                "productions": encoded_productions,
-            }
-        )
+        encoded_rule: dict[str, object] = {
+            "left": rule.left,
+            "productions": encoded_productions,
+        }
+        right_sides = {tuple(right) for right, _, _ in rule.rights}
+        if len(right_sides) < len(rule.rights):
+            # Old tables collapsed declarations with the same RHS.
+            encoded_rule["definition_indices"] = rule.definition_indices
+        encoded_rules.append(encoded_rule)
 
     token_descriptors = [
         {
