@@ -27,7 +27,15 @@ from collections.abc import Mapping, Sequence
 from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Iterable, Protocol, TypeGuard, cast
+from typing import (
+    TYPE_CHECKING,
+    Iterable,
+    NotRequired,
+    Protocol,
+    TypedDict,
+    TypeGuard,
+    cast,
+)
 
 import plare
 from plare.exception import ParserError, ParsingError
@@ -133,8 +141,8 @@ class Item[T]:
 
     ``definition_index`` is the zero-based ordinal assigned to this production
     during grammar construction (counting across all non-terminals in definition
-    order).  It is used to break ties when two reduce actions have equal
-    precedence: the production with the lower index wins.
+    order).  It distinguishes declarations with the same LHS and RHS.  When
+    two reduce actions have equal precedence, the lower index wins.
 
     Attributes:
         left: The non-terminal on the LHS of the rule.
@@ -215,7 +223,7 @@ class Item[T]:
         return f"{self.left} {arrow} {before_dot} . {after_dot}"
 
     def __hash__(self) -> int:
-        return hash((self.left, tuple(self.right), self.loc))
+        return hash((self.left, tuple(self.right), self.loc, self.definition_index))
 
     def __eq__(self, value: object) -> bool:
         return (
@@ -223,6 +231,7 @@ class Item[T]:
             and self.left == value.left
             and self.right == value.right
             and self.loc == value.loc
+            and self.definition_index == value.definition_index
         )
 
 
@@ -1039,20 +1048,32 @@ def load_parse_table_cache[T](
         return None
 
 
+if TYPE_CHECKING:
+
+    class EncodedGrammarProduction(TypedDict):
+        right: list[list[str | int]]
+        precedence: int | None
+
+    class EncodedGrammarRule(TypedDict):
+        left: str
+        productions: list[EncodedGrammarProduction]
+        definition_indices: NotRequired[list[int]]
+
+
 def parse_table_cache_identity[T](
     rules: list[Rule[T]],
 ) -> tuple[str, list[type[Token]], dict[type[Token], int]]:
     """Build the grammar fingerprint and terminal registry used by the cache."""
     tokens: list[type[Token]] = []
     token_ids: dict[type[Token], int] = {}
-    encoded_rules: list[object] = []
+    encoded_rules: list[EncodedGrammarRule] = []
     for rule in rules:
-        encoded_productions: list[object] = []
+        encoded_productions: list[EncodedGrammarProduction] = []
         for production in rule.rights:
             # Semantic makers are rebound from the current grammar on cache load.
             right = production[0]
             prec_override = production[2]
-            encoded_right: list[object] = []
+            encoded_right: list[list[str | int]] = []
             for symbol in right:
                 if isinstance(symbol, type):
                     if symbol not in token_ids:
@@ -1067,12 +1088,15 @@ def parse_table_cache_identity[T](
                     "precedence": prec_override,
                 }
             )
-        encoded_rules.append(
-            {
-                "left": rule.left,
-                "productions": encoded_productions,
-            }
-        )
+        encoded_rule: EncodedGrammarRule = {
+            "left": rule.left,
+            "productions": encoded_productions,
+        }
+        right_sides = {tuple(right) for right, _, _ in rule.rights}
+        if len(right_sides) < len(rule.rights):
+            # Old tables collapsed declarations with the same RHS.
+            encoded_rule["definition_indices"] = rule.definition_indices
+        encoded_rules.append(encoded_rule)
 
     token_descriptors = [
         {

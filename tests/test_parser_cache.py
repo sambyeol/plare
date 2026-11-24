@@ -98,6 +98,30 @@ def test_cache_version_follows_plare_version(
     assert rewritten["version"] == "999.0.0"
 
 
+def test_legacy_cache_for_duplicate_productions_is_rebuilt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class First:
+        pass
+
+    class Second:
+        pass
+
+    legacy_cache = (
+        Path(__file__).with_name("fixtures") / "duplicate_productions_cache_v2_0_0.json"
+    ).read_text(encoding="utf-8")
+    payload = json.loads(legacy_cache)
+    monkeypatch.setattr(plare, "__version__", payload["version"])
+    (tmp_path / f"{payload['grammar']}.json").write_text(legacy_cache, encoding="utf-8")
+
+    parser = Parser[First | Second](
+        {"value": [([], First, []), ([], Second, [], PREC_C)]}, cache_dir=tmp_path
+    )
+
+    assert parser.cache_hit is False
+    assert isinstance(parser.parse("value", []), Second)
+
+
 def test_default_cache_directory_is_project_root_plare(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

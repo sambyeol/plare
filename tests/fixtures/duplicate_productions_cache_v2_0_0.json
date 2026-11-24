@@ -1,0 +1,17 @@
+{
+  "checksum": "08386a889ceb8574bd7477d3515033a9ce826484a041f10472a8c295960b195a",
+  "data": {
+    "entry_state": {"value": 0},
+    "table": [
+      [
+        [["nonterminal", "value"], ["goto", 1]],
+        [["eos"], ["reduce", 0]]
+      ],
+      [
+        [["eos"], ["accept", "value"]]
+      ]
+    ]
+  },
+  "grammar": "09c68c78e9bb4ac29f180fc795d73b0f6c993fc59573cbb23c78f9116c691e6c",
+  "version": "2.0.0"
+}

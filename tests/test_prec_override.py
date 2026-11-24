@@ -8,6 +8,10 @@ Covers two orthogonal features:
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+
 from plare.parser import Parser
 from plare.token import Token
 
@@ -206,3 +210,29 @@ def test_rr_equal_precedence_first_defined_wins() -> None:
     assert isinstance(
         result, FirstResult
     ), f"expected FirstResult (first-defined), got {type(result).__name__}"
+
+
+@pytest.mark.parametrize(
+    ("prec_token", "expected_type"),
+    [(STAR, SecondResult), (Lit, FirstResult)],
+    ids=["higher-precedence", "equal-precedence"],
+)
+def test_rr_duplicate_productions_respect_precedence(
+    tmp_path: Path,
+    prec_token: type[Token],
+    expected_type: type[FirstResult] | type[SecondResult],
+) -> None:
+    for cache_hit in (False, True):
+        parser = Parser[FirstResult | SecondResult](
+            {
+                "result": [
+                    ([Lit], FirstResult, [0]),
+                    ([Lit], SecondResult, [0], prec_token),
+                ],
+            },
+            cache_dir=tmp_path,
+        )
+        assert parser.cache_hit is cache_hit
+        assert isinstance(
+            parser.parse("result", [Lit("x", lineno=1, offset=0)]), expected_type
+        )
