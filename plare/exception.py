@@ -41,18 +41,15 @@ class ParserError(PlareException):
     """
 
 
-class UnknownStartRuleError(PlareException):
-    """Raised by ``Parser.parse`` for an unregistered start rule."""
-
-
 class ParsingError(PlareException):
-    """Raised by ``Parser.parse`` when the token stream does not match the grammar.
+    """Raised by ``Parser.parse`` for a token mismatch or unknown start rule.
 
     Attributes:
-        token: The offending token, or ``None`` when end-of-input is unexpected.
-        lineno: 1-based line number of the failure position.
-        offset: 0-based column offset of the failure position.
-        expected: Terminal token classes that would have been valid at this point.
+        token: The offending token, or ``None`` when the error has no token.
+        lineno: 1-based line number of the failure position, or ``0`` when unknown.
+        offset: 0-based column offset of the failure position, or ``0`` when unknown.
+        expected: Terminal token classes valid at the failure point, with an
+            empty list for an unknown start rule.
     """
 
     def __init__(
