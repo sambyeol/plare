@@ -1187,6 +1187,9 @@ class Parser[T]:
         token class's precedence. The default uses the rightmost terminal with
         nonzero precedence, or ``0`` if there is none.
 
+    Every referenced non-terminal must be defined in the grammar. An undefined
+    non-terminal raises ``ParserError`` during construction.
+
     By default, generated tables are stored under ``.plare`` in the current
     working directory. Pass ``cache_dir=None`` to disable caching.
 
@@ -1245,7 +1248,13 @@ class Parser[T]:
                 else:
                     right, action, args = entry
                     prec_override = None
-                normalized_right = list(right)
+                normalized_right: list[type[Token] | str] = []
+                for symbol in right:
+                    if isinstance(symbol, str) and symbol not in grammar:
+                        raise ParserError(
+                            f"Undefined nonterminal {symbol!r} in rule {left!r}"
+                        )
+                    normalized_right.append(symbol)
                 norm_rights.append((normalized_right, action, args, prec_override))
             rule = Rule[T](left, norm_rights, global_idx)
             rules[left] = rule

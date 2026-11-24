@@ -1,10 +1,12 @@
-"""Tests for structured LexingError and ParsingError fields."""
+"""Tests for lexer and parser error reporting."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from plare.exception import LexingError, ParsingError
+from plare.exception import LexingError, ParserError, ParsingError
 from plare.lexer import Lexer
 from plare.parser import Parser
 from plare.token import Token
@@ -44,6 +46,31 @@ GRAMMAR: dict[str, list[GrammarEntry[Expr]]] = {
 
 def make_tok(cls: type[Token], *, lineno: int = 1, offset: int = 0) -> Token:
     return cls("x", lineno=lineno, offset=offset)
+
+
+# ---------------------------------------------------------------------------
+# ParserError — undefined nonterminal
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("use_cache", [False, True])
+@pytest.mark.parametrize(
+    "right", [["term"], [Num, "term"]], ids=["leading", "after-terminal"]
+)
+def test_parser_error_undefined_nonterminal(
+    right: list[type[Token] | str], use_cache: bool, tmp_path: Path
+) -> None:
+    """Construction names the missing nonterminal and its referring rule."""
+    cache_dir = tmp_path if use_cache else None
+
+    with pytest.raises(ParserError) as exc_info:
+        Parser[Expr]({"expr": [(right, None, [0])]}, cache_dir=cache_dir)
+
+    message = str(exc_info.value)
+    assert "'term'" in message
+    assert "'expr'" in message
+    if cache_dir is not None:
+        assert not list(cache_dir.iterdir())
 
 
 # ---------------------------------------------------------------------------
