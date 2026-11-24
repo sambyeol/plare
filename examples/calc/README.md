@@ -151,7 +151,7 @@ parsed = parser.parse("exp", lexer.lex("start", "1 + 2"))
 ## Resolving conflicts
 You can resolve conflicts between shift and reduce actions based on "precedence" and "associative".
 The precedence and associative can be defined as class variable when defining tokens.
-By default, all tokens have a precedence of `0` and `"left"` associativity.
+By default, tokens have precedence `0` and right associativity. Set `associative = "left"` on an operator token class when you need left grouping.
 In this example, `STAR` and `DIV` have higher precedence, which means `1 + 2 * 3` will be parsed into `(1 + (2 * 3))`, not `((1 + 2) * 3)`.
 
 ## Interprete

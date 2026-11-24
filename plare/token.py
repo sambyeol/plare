@@ -31,7 +31,7 @@ class Token:
             resolver.  Used during shift/reduce and reduce/reduce conflict
             resolution in ``Parser.__init__``.
         associative: Tie-breaker when two operators share the same precedence.
-            Defaults to ``"left"``.
+            Defaults to ``"right"``.
 
     Instance attributes (set in ``__init__``):
 

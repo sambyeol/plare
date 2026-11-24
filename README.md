@@ -28,16 +28,38 @@ from plare.lexer import Lexer
 from plare.parser import Parser
 from plare.token import Token
 
+
 class NUM(Token):
     def __init__(self, value: str, *, lineno: int, offset: int) -> None:
         super().__init__(value, lineno=lineno, offset=offset)
         self.value = int(value)
 
+
 class PLUS(Token):
     pass
 
-lexer = Lexer({"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start")]})
-parser = Parser({"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]})
+
+class Exp:
+    value: int
+
+
+class Const(Exp):
+    def __init__(self, number: NUM) -> None:
+        self.value = number.value
+
+
+class Add(Exp):
+    def __init__(self, left: Exp, right: Exp) -> None:
+        self.value = left.value + right.value
+
+
+lexer: Lexer[None] = Lexer({"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start")]})
+parser: Parser[Exp] = Parser(
+    {"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]}
+)
+result = parser.parse("exp", lexer.lex("start", "1 + 2"))
+assert isinstance(result, Exp)
+print(result.value)  # 3
 ```
 
 ## Examples

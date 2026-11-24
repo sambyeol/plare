@@ -1151,15 +1151,20 @@ class Parser[T]:
             ...
         }
 
-    Each rule tuple is ``(rhs, action_type, arg_indices)``:
+    Provide each rule as ``(rhs, action_type, arg_indices)`` or add
+    ``prec_token`` as the fourth item.
+
       * ``rhs``: list of ``type[Token]`` subclasses (terminals) and ``str``
         (non-terminal names).
       * ``action_type``: class to construct on reduction, or ``None`` to pass
         through a single child unchanged.
       * ``arg_indices``: which RHS children to forward to ``action_type.__init__``.
+      * The optional ``prec_token`` sets the production precedence to that
+        token class's precedence. The default uses the rightmost terminal with
+        nonzero precedence, or ``0`` if there is none.
 
     By default, generated tables are stored under ``.plare`` in the current
-    project directory. Pass ``cache_dir=None`` to disable caching.
+    working directory. Pass ``cache_dir=None`` to disable caching.
 
     Attributes:
         table: The completed LR action/goto table.
