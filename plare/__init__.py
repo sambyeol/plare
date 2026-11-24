@@ -6,8 +6,8 @@ Public API
 * ``Parser`` (:mod:`plare.parser`) — LALR(1) parser with operator-precedence
   conflict resolution.
 * ``Token`` (:mod:`plare.token`) — base class for all terminal symbols.
-* ``PlareException``, ``LexingError``, ``ParserError``, ``ParsingError``
-  (:mod:`plare.exception`) — exception hierarchy.
+* ``PlareException``, ``LexingError``, ``ParserError``, ``ParsingError``,
+  and ``UnknownStartRuleError`` (:mod:`plare.exception`) — exception hierarchy.
 
 See ``examples/calc/calc.py`` and ``examples/sum_of_list/sum.py`` for
 end-to-end usage examples.

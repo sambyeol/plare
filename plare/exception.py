@@ -41,6 +41,10 @@ class ParserError(PlareException):
     """
 
 
+class UnknownStartRuleError(PlareException):
+    """Raised by ``Parser.parse`` for an unregistered start rule."""
+
+
 class ParsingError(PlareException):
     """Raised by ``Parser.parse`` when the token stream does not match the grammar.
 

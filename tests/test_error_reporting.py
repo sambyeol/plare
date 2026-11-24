@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from plare.exception import LexingError, ParserError, ParsingError
+from plare.exception import (
+    LexingError,
+    ParserError,
+    ParsingError,
+    PlareException,
+    UnknownStartRuleError,
+)
 from plare.lexer import Lexer
 from plare.parser import Parser
 from plare.token import Token
@@ -71,6 +77,28 @@ def test_parser_error_undefined_nonterminal(
     assert "'expr'" in message
     if cache_dir is not None:
         assert not list(cache_dir.iterdir())
+
+
+# ---------------------------------------------------------------------------
+# UnknownStartRuleError — unregistered entry point
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("use_cache", [False, True])
+def test_unknown_start_rule(use_cache: bool, tmp_path: Path) -> None:
+    """Both built and cached parsers identify the requested start rule."""
+    cache_dir = tmp_path if use_cache else None
+    if use_cache:
+        Parser(GRAMMAR, cache_dir=cache_dir)
+    parser = Parser(GRAMMAR, cache_dir=cache_dir)
+    assert parser.cache_hit is use_cache
+
+    with pytest.raises(PlareException, match=r"'typo'") as exc_info:
+        parser.parse("typo", [])
+
+    assert isinstance(exc_info.value, UnknownStartRuleError)
+    tokens = [make_tok(kind) for kind in (Num, Plus, Num)]
+    assert isinstance(parser.parse("expr", tokens), Expr)
 
 
 # ---------------------------------------------------------------------------

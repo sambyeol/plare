@@ -38,7 +38,7 @@ from typing import (
 )
 
 import plare
-from plare.exception import ParserError, ParsingError
+from plare.exception import ParserError, ParsingError, UnknownStartRuleError
 from plare.token import Token
 from plare.utils import logger
 
@@ -1471,12 +1471,16 @@ class Parser[T]:
             The root value produced by the top-level semantic action.
 
         Raises:
+            UnknownStartRuleError: If ``var`` names an unregistered start rule.
             ParsingError: On unexpected token, missing action, or wrong
                 acceptance symbol.
         """
-        lexbuf = chain(iter(lexbuf), [EOS("", lineno=0, offset=0)])
+        try:
+            state = self.entry_state[var]
+        except KeyError:
+            raise UnknownStartRuleError(f"Unknown start rule {var!r}") from None
 
-        state = self.entry_state[var]
+        lexbuf = chain(iter(lexbuf), [EOS("", lineno=0, offset=0)])
         stack = [state]
         symbols = list[T | Token]()
 
