@@ -25,7 +25,7 @@ pip install plare
 
 ```python
 from plare.lexer import Lexer
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 
@@ -53,7 +53,9 @@ class Add(Exp):
         self.value = left.value + right.value
 
 
-lexer: Lexer[None] = Lexer({"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start")]})
+lexer: Lexer[None] = Lexer(
+    {"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start"), (r"\Z", EOS)]}
+)
 parser: Parser[Exp] = Parser(
     {"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]}
 )
@@ -61,6 +63,8 @@ result = parser.parse("exp", lexer.lex("start", "1 + 2"))
 assert isinstance(result, Exp)
 print(result.value)  # 3
 ```
+
+Register `(r"\Z", EOS)` in each lexer state where input can end. When supplying tokens directly to `Parser.parse()`, include one `EOS` as the final token with the end-of-input position.
 
 ## Examples
 

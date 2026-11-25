@@ -24,7 +24,6 @@ import json
 import os
 from collections import deque
 from collections.abc import Mapping, Sequence
-from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import (
@@ -44,7 +43,7 @@ from plare.utils import logger
 
 
 class EOS(Token):
-    """Sentinel token appended to every token stream to signal end-of-input."""
+    """End-of-stream token that callers supply as the last token to ``Parser.parse``."""
 
 
 class EPSILON(Token):
@@ -1464,15 +1463,16 @@ class Parser[T]:
         Args:
             var: The entry non-terminal to parse (must be a key in the grammar
                 passed to ``__init__``).
-            lexbuf: An iterable of ``Token`` instances produced by the lexer.
-                An ``EOS`` sentinel is appended automatically.
+            lexbuf: An iterable of ``Token`` instances ending in exactly one
+                ``EOS`` token. In a lexer, register ``(r"\\Z", EOS)`` in each
+                state where the input may end.
 
         Returns:
             The root value produced by the top-level semantic action.
 
         Raises:
-            ParsingError: On unknown start rule, unexpected token, missing
-                action, or wrong acceptance symbol.
+            ParsingError: On unknown start rule, unexpected token or end of
+                input, a missing or misplaced ``EOS``, or an invalid action.
         """
         try:
             state = self.entry_state[var]
@@ -1485,7 +1485,7 @@ class Parser[T]:
                 expected=[],
             ) from None
 
-        lexbuf = chain(iter(lexbuf), [EOS("", lineno=0, offset=0)])
+        tokens = iter(lexbuf)
         stack = [state]
         symbols = list[T | Token]()
 
@@ -1494,24 +1494,39 @@ class Parser[T]:
         last_token: Token | None = None
         while True:
             if token is None:
-                token = next(lexbuf, None)
-            if token is None:
-                raise ParsingError(
-                    "Unexpected end of input",
-                    token=None,
-                    lineno=last_token.lineno if last_token else 0,
-                    offset=last_token.offset if last_token else 0,
-                    expected=self.table.expected_tokens(state),
-                )
+                token = next(tokens, None)
+                if token is None:
+                    raise ParsingError(
+                        "Token stream ended without EOS",
+                        token=None,
+                        lineno=last_token.lineno if last_token is not None else 1,
+                        offset=last_token.offset if last_token is not None else 0,
+                        expected=self.table.expected_tokens(state),
+                    )
+                if type(token) is EOS:
+                    trailing = next(tokens, None)
+                    if trailing is not None:
+                        raise ParsingError(
+                            f"Unexpected token after EOS: {type(trailing).__name__}",
+                            token=trailing,
+                            lineno=trailing.lineno,
+                            offset=trailing.offset,
+                            expected=[],
+                        )
             if key is None:
                 key = type(token)
 
             try:
                 action = self.table[state, key]
             except KeyError:
+                unexpected_end = key is EOS
                 raise ParsingError(
-                    f"Unexpected token: {type(token).__name__}",
-                    token=token,
+                    (
+                        "Unexpected end of input"
+                        if unexpected_end
+                        else f"Unexpected token: {type(token).__name__}"
+                    ),
+                    token=None if unexpected_end else token,
                     lineno=token.lineno,
                     offset=token.offset,
                     expected=self.table.expected_tokens(state),

@@ -30,7 +30,7 @@ import pytest
 
 from plare.exception import LexingError, ParsingError
 from plare.lexer import Lexer
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 # ---------------------------------------------------------------------------
@@ -329,6 +329,7 @@ expr_lexer: Lexer[None] = Lexer(
             (r"\(", LPAREN),
             (r"\)", RPAREN),
             (r"[a-zA-Z_]\w*", lex_word),
+            (r"\Z", EOS),
         ]
     }
 )
@@ -669,7 +670,7 @@ def test_parsing_error_on_unclosed_paren() -> None:
 
 
 def test_parsing_error_on_empty_input() -> None:
-    """An empty token stream (no expression) raises ParsingError."""
+    """An empty source (no expression) raises ParsingError."""
     with pytest.raises(ParsingError):
         parse_eval("")
 

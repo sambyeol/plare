@@ -74,16 +74,21 @@ For example, the following rule will create a `PLUS` token when it matches `+`:
 }
 ```
 You can switch to other lexing rules, by assigning a string instead of a `Token`.
-The following code will switch to `"comment"` mode when the string starts with `//`:
+
+This example switches to `"comment"` mode when the string starts with `//` and registers `(r"\Z", EOS)` in both states so the lexer emits an end-of-stream token when the input ends.
 ```python
+from plare.parser import EOS
+
 {
     "start": [
         (r"//", "comment"),
-        ...
+        ...,
+        (r"\Z", EOS),
     ],
     "comment": [
         (r"//", "start"),
         (r".", "comment"),
+        (r"\Z", EOS),
     ]
 }
 ```
@@ -142,7 +147,7 @@ from plare.parser import Parser
 parser = Parser({ ... })
 ```
 
-The `parse` method in the parser gets a start non-terminal symbol and an iterable sequence of `Token` and returns a parsed tree.
+The `parse` method takes a start non-terminal symbol and an iterable of tokens ending in one `EOS` and returns a parsed tree.
 For example, you can parse `"1 + 2"` into `exp`, using `lexer` defined above, like:
 ```python
 parsed = parser.parse("exp", lexer.lex("start", "1 + 2"))

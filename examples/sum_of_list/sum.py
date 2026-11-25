@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from typing import Any
 
 from plare.lexer import Lexer
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 
@@ -68,6 +68,7 @@ def main() -> None:
                 (r"\]", RBRACKET),
                 (r",", COMMA),
                 (r"-?\d+", NUM),
+                (r"\Z", EOS),
             ]
         }
     )

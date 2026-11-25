@@ -10,7 +10,7 @@ import pytest
 
 import plare
 import plare.parser as parser_module
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 
@@ -59,6 +59,7 @@ def expression_tokens() -> list[Token]:
         NUM_C("2", lineno=1, offset=2),
         PLUS_C("+", lineno=1, offset=3),
         NUM_C("3", lineno=1, offset=4),
+        EOS("", lineno=1, offset=5),
     ]
 
 
@@ -119,7 +120,7 @@ def test_legacy_cache_for_duplicate_productions_is_rebuilt(
     )
 
     assert parser.cache_hit is False
-    assert isinstance(parser.parse("value", []), Second)
+    assert isinstance(parser.parse("value", [EOS("", lineno=1, offset=0)]), Second)
 
 
 def test_default_cache_directory_is_project_root_plare(
@@ -238,6 +239,7 @@ def test_cache_rebinds_current_local_semantic_action(
             NUM_C("4", lineno=1, offset=0),
             PLUS_C("+", lineno=1, offset=1),
             NUM_C("7", lineno=1, offset=2),
+            EOS("", lineno=1, offset=3),
         ],
     )
 
@@ -304,6 +306,7 @@ def test_grammar_structure_change_invalidates_cache(tmp_path: Path) -> None:
         [
             PLUS_C("+", lineno=1, offset=0),
             NUM_C("9", lineno=1, offset=1),
+            EOS("", lineno=1, offset=2),
         ],
     )
 

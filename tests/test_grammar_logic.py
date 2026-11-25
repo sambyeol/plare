@@ -14,7 +14,7 @@ import pytest
 
 from plare.exception import ParsingError
 from plare.lexer import Lexer
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 type GrammarDict[T] = dict[
@@ -135,6 +135,7 @@ CALC_LEXER = Lexer(
             (r"/", SLASH_C),
             (r"\(", LPAREN_C),
             (r"\)", RPAREN_C),
+            (r"\Z", EOS),
         ]
     }
 )
@@ -150,7 +151,12 @@ def test_calc_single_addition() -> None:
     """1 + 2 evaluates to 3 and produces an AddC node."""
     result = calc_parser.parse(
         "expr",
-        [num(1, 0), PLUS_C("+", lineno=1, offset=1), num(2, 2)],
+        [
+            num(1, 0),
+            PLUS_C("+", lineno=1, offset=1),
+            num(2, 2),
+            EOS("", lineno=1, offset=3),
+        ],
     )
     assert isinstance(result, AddC)
     assert isinstance(result.l, NumC) and result.l.value == 1
@@ -168,6 +174,7 @@ def test_calc_precedence_mul_over_add() -> None:
             num(2, 2),
             STAR_C("*", lineno=1, offset=3),
             num(3, 4),
+            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, AddC), "'+' must be root because '*' binds tighter"
@@ -185,6 +192,7 @@ def test_calc_left_assoc_subtraction_chain() -> None:
             num(3, 3),
             MINUS_C("-", lineno=1, offset=4),
             num(2, 5),
+            EOS("", lineno=1, offset=6),
         ],
     )
     assert isinstance(result, SubC)
@@ -198,7 +206,12 @@ def test_calc_integer_division() -> None:
     """7 / 2 produces DivC and floor-divides to 3."""
     result = calc_parser.parse(
         "expr",
-        [num(7, 0), SLASH_C("/", lineno=1, offset=1), num(2, 2)],
+        [
+            num(7, 0),
+            SLASH_C("/", lineno=1, offset=1),
+            num(2, 2),
+            EOS("", lineno=1, offset=3),
+        ],
     )
     assert isinstance(result, DivC)
     assert eval_c(result) == 3
@@ -216,6 +229,7 @@ def test_calc_parentheses_override_precedence() -> None:
             PLUS_C("+", lineno=1, offset=4),
             num(4, 5),
             RPAREN_C(")", lineno=1, offset=6),
+            EOS("", lineno=1, offset=7),
         ],
     )
     assert isinstance(result, MulC), "root must be Mul"
@@ -233,6 +247,7 @@ def test_calc_mixed_left_assoc_same_precedence() -> None:
             num(2, 2),
             PLUS_C("+", lineno=1, offset=3),
             num(3, 4),
+            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, AddC), "outer op must be Add"
@@ -293,6 +308,7 @@ def test_default_sr_conflict_is_left_associative() -> None:
             NUM_SR("2", lineno=1, offset=2),
             PLUS_SR("+", lineno=1, offset=3),
             NUM_SR("3", lineno=1, offset=4),
+            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, AddSR)
@@ -385,6 +401,7 @@ def test_dangling_else_inner_if_gets_else() -> None:
         BASE_D("s1", lineno=1, offset=22),
         ELSE_D("else", lineno=1, offset=25),
         BASE_D("s2", lineno=1, offset=30),
+        EOS("", lineno=1, offset=32),
     ]
     result = p.parse("stmt", tokens)
     # inner if should absorb the else
@@ -480,6 +497,7 @@ def test_three_level_unary_tighter_than_mul() -> None:
             NUM_UP("2", lineno=1, offset=1),
             STAR_UP("*", lineno=1, offset=2),
             NUM_UP("3", lineno=1, offset=3),
+            EOS("", lineno=1, offset=4),
         ],
     )
     assert isinstance(result, MulUP), "root must be Mul"
@@ -497,6 +515,7 @@ def test_three_level_unary_with_add() -> None:
             PLUS_UP("+", lineno=1, offset=1),
             MINUS_UP("-", lineno=1, offset=2),
             NUM_UP("3", lineno=1, offset=3),
+            EOS("", lineno=1, offset=4),
         ],
     )
     assert isinstance(result, AddUP), "root must be Add"
@@ -573,7 +592,11 @@ def test_list_empty() -> None:
     """[] produces EmptyListL with items == []."""
     result = list_parser.parse(
         "list",
-        [LBRACKET_L("[", lineno=1, offset=0), RBRACKET_L("]", lineno=1, offset=1)],
+        [
+            LBRACKET_L("[", lineno=1, offset=0),
+            RBRACKET_L("]", lineno=1, offset=1),
+            EOS("", lineno=1, offset=2),
+        ],
     )
     assert isinstance(result, EmptyListL)
     assert result.items == []
@@ -587,6 +610,7 @@ def test_list_single_element() -> None:
             LBRACKET_L("[", lineno=1, offset=0),
             num_l(42, 1),
             RBRACKET_L("]", lineno=1, offset=3),
+            EOS("", lineno=1, offset=4),
         ],
     )
     assert isinstance(result, ListL)
@@ -605,6 +629,7 @@ def test_list_three_elements() -> None:
             COMMA_L(",", lineno=1, offset=5),
             num_l(3, 7),
             RBRACKET_L("]", lineno=1, offset=8),
+            EOS("", lineno=1, offset=9),
         ],
     )
     assert isinstance(result, ListL)
@@ -691,6 +716,7 @@ def test_call_no_args() -> None:
             ID_F("f", lineno=1, offset=0),
             LPAREN_F("(", lineno=1, offset=1),
             RPAREN_F(")", lineno=1, offset=2),
+            EOS("", lineno=1, offset=3),
         ],
     )
     assert isinstance(result, NoArgCallF)
@@ -707,6 +733,7 @@ def test_call_one_arg() -> None:
             LPAREN_F("(", lineno=1, offset=1),
             num_f(1, 2),
             RPAREN_F(")", lineno=1, offset=3),
+            EOS("", lineno=1, offset=4),
         ],
     )
     assert isinstance(result, CallF)
@@ -727,6 +754,7 @@ def test_call_three_args() -> None:
             COMMA_F(",", lineno=1, offset=6),
             num_f(3, 8),
             RPAREN_F(")", lineno=1, offset=9),
+            EOS("", lineno=1, offset=10),
         ],
     )
     assert isinstance(result, CallF)
@@ -746,9 +774,10 @@ def test_deeply_nested_parentheses() -> None:
     so it handles arbitrarily deep nesting without hitting Python's recursion limit.
     """
     depth = 100
-    tokens = [LPAREN_C("(", lineno=1, offset=i) for i in range(depth)]
+    tokens: list[Token] = [LPAREN_C("(", lineno=1, offset=i) for i in range(depth)]
     tokens += [NUM_C("1", lineno=1, offset=depth)]
     tokens += [RPAREN_C(")", lineno=1, offset=depth + 1 + i) for i in range(depth)]
+    tokens.append(EOS("", lineno=1, offset=2 * depth + 1))
     result = calc_parser.parse("expr", tokens)
     assert isinstance(result, ExprC)
     assert eval_c(result) == 1
@@ -768,9 +797,9 @@ def test_lexer_multiline_position_tracking() -> None:
     and lineno is incremented per newline encountered.
     """
     tokens = list(CALC_LEXER.lex("start", "1\n+\n2"))
-    assert len(tokens) == 3
+    assert len(tokens) == 4
 
-    num1, plus, num2 = tokens
+    num1, plus, num2, eos = tokens
     assert isinstance(num1, NUM_C) and num1.value == 1
     assert num1.lineno == 1 and num1.offset == 0
 
@@ -779,6 +808,9 @@ def test_lexer_multiline_position_tracking() -> None:
 
     assert isinstance(num2, NUM_C) and num2.value == 2
     assert num2.lineno == 3 and num2.offset == 0
+
+    assert isinstance(eos, EOS)
+    assert eos.lineno == 3 and eos.offset == 1
 
     result = calc_parser.parse("expr", tokens)
     assert isinstance(result, ExprC)
@@ -801,6 +833,7 @@ def test_error_unclosed_paren() -> None:
                 PLUS_C("+", lineno=1, offset=2),
                 num(2, 3),
                 # RPAREN_C missing
+                EOS("", lineno=1, offset=4),
             ],
         )
 
@@ -819,6 +852,7 @@ def test_error_trailing_tokens() -> None:
                 PLUS_C("+", lineno=1, offset=1),
                 num(2, 2),
                 num(3, 3),  # extra token — parser cannot accept with this pending
+                EOS("", lineno=1, offset=4),
             ],
         )
 
@@ -866,8 +900,8 @@ program_parser = Parser(PROGRAM_GRAMMAR, cache_dir=None)
 
 
 def test_empty_program() -> None:
-    """An empty token stream produces ProgramE with stmts == []."""
-    result = program_parser.parse("program", [])
+    """A stream containing only EOS produces ProgramE with stmts == []."""
+    result = program_parser.parse("program", [EOS("", lineno=1, offset=0)])
     assert isinstance(result, ProgramE)
     assert result.stmts == []
 
@@ -876,7 +910,7 @@ def test_single_statement_program() -> None:
     """One STMT_E token produces ProgramE with len(stmts) == 1."""
     result = program_parser.parse(
         "program",
-        [STMT_E("x", lineno=1, offset=0)],
+        [STMT_E("x", lineno=1, offset=0), EOS("", lineno=1, offset=1)],
     )
     assert isinstance(result, ProgramE)
     assert len(result.stmts) == 1
@@ -891,6 +925,7 @@ def test_three_statement_program() -> None:
             STMT_E("a", lineno=1, offset=0),
             STMT_E("b", lineno=1, offset=2),
             STMT_E("c", lineno=1, offset=4),
+            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, ProgramE)

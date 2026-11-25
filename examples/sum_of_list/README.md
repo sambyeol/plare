@@ -27,6 +27,8 @@ A lexer will tokenize the given source string.
 To make a lexer, all you need to do is define token classes that inherit from `Token`.
 In this example, you only need to define 4 tokens: `COMMA`, `LBRACKET`, `RBRACKET`, and `NUM`.
 
+Register `(r"\Z", EOS)` with `EOS` from `plare.parser` so the lexer supplies the parser's final token.
+
 ## Defining Parser
 A parser will parse the tokens and build an AST.
 The CFG for the list is as follows:

@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 from plare.lexer import Lexer
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 
@@ -130,10 +130,12 @@ def main():
                 (r"/", SLASH),
                 (r"\(", LPAREN),
                 (r"\)", RPAREN),
+                (r"\Z", EOS),
             ],
             "comment": [
                 (r"//", "start"),
                 (r".", "comment"),
+                (r"\Z", EOS),
             ],
         },
     )

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 # ---------------------------------------------------------------------------
@@ -119,6 +119,7 @@ def token_stream() -> list[Token]:
         NUM("3", lineno=1, offset=1),
         STAR("*", lineno=1, offset=2),
         NUM("4", lineno=1, offset=3),
+        EOS("", lineno=1, offset=4),
     ]
 
 
@@ -206,7 +207,9 @@ def test_rr_equal_precedence_first_defined_wins() -> None:
         "second_val": [([Lit], None, [0])],
     }
     parser = Parser(grammar, cache_dir=None)
-    result = parser.parse("result", [Lit("x", lineno=1, offset=0)])
+    result = parser.parse(
+        "result", [Lit("x", lineno=1, offset=0), EOS("", lineno=1, offset=1)]
+    )
     assert isinstance(
         result, FirstResult
     ), f"expected FirstResult (first-defined), got {type(result).__name__}"
@@ -234,5 +237,8 @@ def test_rr_duplicate_productions_respect_precedence(
         )
         assert parser.cache_hit is cache_hit
         assert isinstance(
-            parser.parse("result", [Lit("x", lineno=1, offset=0)]), expected_type
+            parser.parse(
+                "result", [Lit("x", lineno=1, offset=0), EOS("", lineno=1, offset=1)]
+            ),
+            expected_type,
         )
