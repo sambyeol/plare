@@ -8,7 +8,7 @@ import pytest
 
 from plare.exception import LexingError, ParserError, ParsingError
 from plare.lexer import Lexer
-from plare.parser import Parser
+from plare.parser import EOS, Parser
 from plare.token import Token
 
 type GrammarEntry[T] = (
@@ -138,30 +138,43 @@ def test_parsing_error_unexpected_token_str() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_parsing_error_truncated_input_expected_nonempty() -> None:
-    """When input is too short, ParsingError.expected is non-empty."""
-    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
-    num_tok = make_tok(Num, lineno=1, offset=0)
+@pytest.mark.parametrize(
+    ("source", "position", "expected"),
+    [
+        ("\n17", (2, 0), Plus),
+        ("\n17+", (2, 2), Num),
+        ("\n17+  \n", (2, 2), Num),
+        ("", (1, 0), Num),
+    ],
+)
+def test_parsing_error_truncated_input(
+    source: str, position: tuple[int, int], expected: type[Token]
+) -> None:
+    lexer: Lexer[None] = Lexer(
+        {"start": [(r"\s+", "start"), (r"\d+", Num), (r"\+", Plus)]}
+    )
+    parser = Parser(GRAMMAR, cache_dir=None)
 
-    with pytest.raises(ParsingError) as exc_info:
-        p.parse("expr", [num_tok])
+    with pytest.raises(ParsingError, match="Unexpected end of input") as exc_info:
+        parser.parse("expr", lexer.lex("start", source))
 
-    e = exc_info.value
-    assert len(e.expected) > 0
-    assert Plus in e.expected
+    error = exc_info.value
+    assert error.token is None
+    assert (error.lineno, error.offset) == position
+    assert expected in error.expected
+    assert expected.__name__ in str(error)
 
 
-def test_parsing_error_truncated_input_str() -> None:
-    """str(ParsingError) for truncated input contains the expected class name."""
-    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
-    num_tok = make_tok(Num, lineno=1, offset=0)
+def test_parser_rejects_eos_token_before_stream_exhaustion() -> None:
+    parser = Parser(GRAMMAR, cache_dir=None)
+    eos = EOS("", lineno=1, offset=3)
+    tokens = [make_tok(kind, offset=i) for i, kind in enumerate((Num, Plus, Num))]
+    tokens.extend([eos, make_tok(Num, offset=4)])
 
-    with pytest.raises(ParsingError) as exc_info:
-        p.parse("expr", [num_tok])
+    with pytest.raises(ParsingError, match="Unexpected token: EOS") as exc_info:
+        parser.parse("expr", tokens)
 
-    msg = str(exc_info.value)
-    assert "Line " in msg
-    assert "Plus" in msg
+    assert exc_info.value.token is eos
 
 
 # ---------------------------------------------------------------------------

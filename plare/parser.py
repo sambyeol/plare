@@ -24,7 +24,6 @@ import json
 import os
 from collections import deque
 from collections.abc import Mapping, Sequence
-from itertools import chain
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import (
@@ -44,7 +43,7 @@ from plare.utils import logger
 
 
 class EOS(Token):
-    """Sentinel token appended to every token stream to signal end-of-input."""
+    """Parse-table symbol used when the token stream is exhausted."""
 
 
 class EPSILON(Token):
@@ -1456,7 +1455,8 @@ class Parser[T]:
         maintain a state stack and a symbol stack; on each step look up the
         action for the current state and lookahead token class.
 
-        The ``key`` variable holds the current lookahead *class* (not instance).
+        The ``key`` variable holds the current lookahead token class, using
+        ``EOS`` when the token stream is exhausted.
         After a ``Reduce`` the driver does *not* consume a new token; instead it
         sets ``key = left`` (the reduced non-terminal) and re-enters the action
         lookup, which will find a ``Goto`` action to push the new state.
@@ -1465,14 +1465,15 @@ class Parser[T]:
             var: The entry non-terminal to parse (must be a key in the grammar
                 passed to ``__init__``).
             lexbuf: An iterable of ``Token`` instances produced by the lexer.
-                An ``EOS`` sentinel is appended automatically.
 
         Returns:
             The root value produced by the top-level semantic action.
 
         Raises:
-            ParsingError: On unknown start rule, unexpected token, missing
-                action, or wrong acceptance symbol.
+            ParsingError: On unknown start rule, unexpected token or end of input,
+                missing action, or wrong acceptance symbol. An unexpected end
+                uses the last token's position, or line 1, column 0 for an empty
+                stream.
         """
         try:
             state = self.entry_state[var]
@@ -1485,46 +1486,39 @@ class Parser[T]:
                 expected=[],
             ) from None
 
-        lexbuf = chain(iter(lexbuf), [EOS("", lineno=0, offset=0)])
+        tokens = iter(lexbuf)
         stack = [state]
         symbols = list[T | Token]()
 
-        key: type[Token] | str | None = None
-        token: Token | None = None
+        key: Symbol | None = None
+        token = next(tokens, None)
         last_token: Token | None = None
+
         while True:
-            if token is None:
-                token = next(lexbuf, None)
-            if token is None:
-                raise ParsingError(
-                    "Unexpected end of input",
-                    token=None,
-                    lineno=last_token.lineno if last_token else 0,
-                    offset=last_token.offset if last_token else 0,
-                    expected=self.table.expected_tokens(state),
-                )
             if key is None:
-                key = type(token)
+                key = type(token) if token is not None else EOS
 
             try:
                 action = self.table[state, key]
             except KeyError:
-                raise ParsingError(
-                    f"Unexpected token: {type(token).__name__}",
-                    token=token,
-                    lineno=token.lineno,
-                    offset=token.offset,
-                    expected=self.table.expected_tokens(state),
-                ) from None
+                error_message = (
+                    "Unexpected end of input"
+                    if token is None
+                    else f"Unexpected token: {type(token).__name__}"
+                )
+                break
             logger.debug("State: %d, Symbol: %s, Action: %s", state, key, action)
-            key = None
             match action:
                 case Shift(next=n):
+                    if token is None:
+                        error_message = "Unexpected end of input"
+                        break
                     state = n
                     stack.append(state)
                     symbols.append(token)
                     last_token = token
-                    token = None
+                    token = next(tokens, None)
+                    key = None
 
                 case Reduce(left, n, maker):
                     if n > 0:
@@ -1548,25 +1542,26 @@ class Parser[T]:
                 case Goto(next=n):
                     state = n
                     stack.append(state)
+                    key = None
 
                 case Accept(symbol):
                     if symbol != var:
-                        raise ParsingError(
-                            f"Unexpected symbol parsed: {symbol}",
-                            token=token,
-                            lineno=token.lineno,
-                            offset=token.offset,
-                            expected=self.table.expected_tokens(state),
-                        )
-                    break
+                        error_message = f"Unexpected symbol parsed: {symbol}"
+                        break
+                    if token is not None:
+                        error_message = f"Unexpected token: {type(token).__name__}"
+                        break
+                    return symbols[-1]
 
                 case _:
-                    raise ParsingError(
-                        f"No action for state {state} and symbol {key}",
-                        token=token,
-                        lineno=token.lineno,
-                        offset=token.offset,
-                        expected=self.table.expected_tokens(state),
-                    )
+                    error_message = f"No action for state {state} and symbol {key}"
+                    break
 
-        return symbols[-1]
+        position = token if token is not None else last_token
+        raise ParsingError(
+            error_message,
+            token=token,
+            lineno=position.lineno if position is not None else 1,
+            offset=position.offset if position is not None else 0,
+            expected=self.table.expected_tokens(state),
+        ) from None
