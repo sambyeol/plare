@@ -10,13 +10,8 @@ import pytest
 
 import plare
 import plare.parser as parser_module
-from plare.exception import ParsingError
 from plare.parser import Parser
 from plare.token import Token
-
-
-class EOS(Token):
-    pass
 
 
 class NUM_C(Token):
@@ -64,7 +59,6 @@ def expression_tokens() -> list[Token]:
         NUM_C("2", lineno=1, offset=2),
         PLUS_C("+", lineno=1, offset=3),
         NUM_C("3", lineno=1, offset=4),
-        EOS("", lineno=1, offset=5),
     ]
 
 
@@ -84,32 +78,11 @@ def only_cache_file(cache_dir: Path) -> Path:
     return cache_files[0]
 
 
-def test_cached_parse_table_uses_the_callers_end_token(tmp_path: Path) -> None:
-    class EndInput(Token):
-        pass
-
-    grammar = {"value": [([NUM_C], NumC, [0])]}
-    Parser(grammar, eos=EOS, cache_dir=tmp_path)
-    parser = Parser(grammar, eos=EndInput, cache_dir=tmp_path)
-    assert parser.cache_hit
-
-    number = NUM_C("8", lineno=1, offset=0)
-    result = parser.parse("value", [number, EndInput("", lineno=1, offset=1)])
-    assert isinstance(result, NumC)
-    assert result.value == 8
-
-    wrong_end = EOS("", lineno=1, offset=1)
-    with pytest.raises(ParsingError) as exc_info:
-        parser.parse("value", [number, wrong_end])
-    assert exc_info.value.token is wrong_end
-    assert exc_info.value.expected == [EndInput]
-
-
 def test_cache_version_follows_plare_version(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache_dir = tmp_path / "version"
-    Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    Parser(expression_grammar(), cache_dir=cache_dir)
     cache_file = only_cache_file(cache_dir)
     payload = json.loads(cache_file.read_text(encoding="utf-8"))
 
@@ -117,7 +90,7 @@ def test_cache_version_follows_plare_version(
     assert payload["version"] == plare.__version__
 
     monkeypatch.setattr(plare, "__version__", "999.0.0")
-    rebuilt = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    rebuilt = Parser(expression_grammar(), cache_dir=cache_dir)
     rewritten = json.loads(cache_file.read_text(encoding="utf-8"))
 
     assert rebuilt.cache_hit is False
@@ -142,13 +115,11 @@ def test_legacy_cache_for_duplicate_productions_is_rebuilt(
     (tmp_path / f"{payload['grammar']}.json").write_text(legacy_cache, encoding="utf-8")
 
     parser = Parser[First | Second](
-        {"value": [([], First, []), ([], Second, [], PREC_C)]},
-        eos=EOS,
-        cache_dir=tmp_path,
+        {"value": [([], First, []), ([], Second, [], PREC_C)]}, cache_dir=tmp_path
     )
 
     assert parser.cache_hit is False
-    assert isinstance(parser.parse("value", [EOS("", lineno=1, offset=0)]), Second)
+    assert isinstance(parser.parse("value", []), Second)
 
 
 def test_default_cache_directory_is_project_root_plare(
@@ -156,7 +127,7 @@ def test_default_cache_directory_is_project_root_plare(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    first = Parser(expression_grammar(), eos=EOS)
+    first = Parser(expression_grammar())
 
     cache_dir = tmp_path / ".plare"
     assert first.cache_hit is False
@@ -165,7 +136,7 @@ def test_default_cache_directory_is_project_root_plare(
     monkeypatch.setattr(
         parser_module, "compute_lalr1_lookaheads", fail_if_table_is_built
     )
-    cached = Parser(expression_grammar(), eos=EOS)
+    cached = Parser(expression_grammar())
 
     assert cached.cache_hit is True
 
@@ -179,8 +150,8 @@ def test_default_cache_keeps_multiple_grammars(
         "value": [([PLUS_C, NUM_C], NumC, [1])],
     }
 
-    Parser(first_grammar, eos=EOS)
-    Parser(second_grammar, eos=EOS)
+    Parser(first_grammar)
+    Parser(second_grammar)
 
     cache_dir = tmp_path / ".plare"
     assert len(list(cache_dir.glob("*.json"))) == 2
@@ -188,8 +159,8 @@ def test_default_cache_keeps_multiple_grammars(
     monkeypatch.setattr(
         parser_module, "compute_lalr1_lookaheads", fail_if_table_is_built
     )
-    assert Parser(first_grammar, eos=EOS).cache_hit is True
-    assert Parser(second_grammar, eos=EOS).cache_hit is True
+    assert Parser(first_grammar).cache_hit is True
+    assert Parser(second_grammar).cache_hit is True
 
 
 def test_cache_directory_none_disables_cache(
@@ -197,7 +168,7 @@ def test_cache_directory_none_disables_cache(
 ) -> None:
     monkeypatch.chdir(tmp_path)
 
-    parser = Parser(expression_grammar(), eos=EOS, cache_dir=None)
+    parser = Parser(expression_grammar(), cache_dir=None)
 
     assert parser.cache_hit is False
     assert not (tmp_path / ".plare").exists()
@@ -217,7 +188,7 @@ def test_cache_miss_writes_file_and_hit_skips_table_build(
 ) -> None:
     cache_dir = tmp_path / "nested" / "cache"
 
-    first = Parser(expression_grammar(), eos=EOS, cache_dir=str(cache_dir))
+    first = Parser(expression_grammar(), cache_dir=str(cache_dir))
 
     assert first.cache_hit is False
     assert only_cache_file(cache_dir).is_file()
@@ -228,7 +199,7 @@ def test_cache_miss_writes_file_and_hit_skips_table_build(
     monkeypatch.setattr(
         parser_module, "compute_lalr1_lookaheads", fail_if_table_is_built
     )
-    second = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    second = Parser(expression_grammar(), cache_dir=cache_dir)
 
     assert second.cache_hit is True
     assert second.entry_state == first.entry_state
@@ -251,7 +222,6 @@ def test_cache_rebinds_current_local_semantic_action(
     cache_dir = tmp_path / "local-action"
     Parser(
         {"value": [([NUM_C, PLUS_C, NUM_C], First, [0, 2])]},
-        eos=EOS,
         cache_dir=cache_dir,
     )
     monkeypatch.setattr(
@@ -260,7 +230,6 @@ def test_cache_rebinds_current_local_semantic_action(
 
     cached = Parser(
         {"value": [([NUM_C, PLUS_C, NUM_C], Second, [2, 0])]},
-        eos=EOS,
         cache_dir=cache_dir,
     )
     result = cached.parse(
@@ -269,7 +238,6 @@ def test_cache_rebinds_current_local_semantic_action(
             NUM_C("4", lineno=1, offset=0),
             PLUS_C("+", lineno=1, offset=1),
             NUM_C("7", lineno=1, offset=2),
-            EOS("", lineno=1, offset=3),
         ],
     )
 
@@ -286,12 +254,12 @@ def test_cache_preserves_non_alphabetical_entry_order(
         "a_value": [([NUM_C], NumC, [0])],
     }
     cache_dir = tmp_path / "entry-order"
-    first = Parser(grammar, eos=EOS, cache_dir=cache_dir)
+    first = Parser(grammar, cache_dir=cache_dir)
     monkeypatch.setattr(
         parser_module, "compute_lalr1_lookaheads", fail_if_table_is_built
     )
 
-    cached = Parser(grammar, eos=EOS, cache_dir=cache_dir)
+    cached = Parser(grammar, cache_dir=cache_dir)
 
     assert cached.cache_hit is True
     assert (
@@ -308,13 +276,13 @@ def test_token_conflict_metadata_change_invalidates_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache_dir = tmp_path / "associativity"
-    first = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    first = Parser(expression_grammar(), cache_dir=cache_dir)
     assert_expression_result(
         first.parse("expr", expression_tokens()), left_associative=True
     )
 
     monkeypatch.setattr(PLUS_C, "associative", "right")
-    second = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    second = Parser(expression_grammar(), cache_dir=cache_dir)
 
     assert second.cache_hit is False
     assert len(list(cache_dir.glob("*.json"))) == 2
@@ -325,11 +293,10 @@ def test_token_conflict_metadata_change_invalidates_cache(
 
 def test_grammar_structure_change_invalidates_cache(tmp_path: Path) -> None:
     cache_dir = tmp_path / "grammar"
-    Parser({"value": [([NUM_C], NumC, [0])]}, eos=EOS, cache_dir=cache_dir)
+    Parser({"value": [([NUM_C], NumC, [0])]}, cache_dir=cache_dir)
 
     changed = Parser(
         {"value": [([PLUS_C, NUM_C], NumC, [1])]},
-        eos=EOS,
         cache_dir=cache_dir,
     )
     result = changed.parse(
@@ -337,7 +304,6 @@ def test_grammar_structure_change_invalidates_cache(tmp_path: Path) -> None:
         [
             PLUS_C("+", lineno=1, offset=0),
             NUM_C("9", lineno=1, offset=1),
-            EOS("", lineno=1, offset=2),
         ],
     )
 
@@ -352,10 +318,10 @@ def test_prec_token_change_invalidates_cache(
 ) -> None:
     cache_dir = tmp_path / "prec"
     grammar = {"value": [([NUM_C], NumC, [0], PREC_C)]}
-    Parser(grammar, eos=EOS, cache_dir=cache_dir)
+    Parser(grammar, cache_dir=cache_dir)
 
     monkeypatch.setattr(PREC_C, "precedence", 2)
-    changed = Parser(grammar, eos=EOS, cache_dir=cache_dir)
+    changed = Parser(grammar, cache_dir=cache_dir)
 
     assert changed.cache_hit is False
     assert len(list(cache_dir.glob("*.json"))) == 2
@@ -366,11 +332,11 @@ def test_corrupt_cache_is_rebuilt(
     contents: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cache_dir = tmp_path / "corrupt"
-    Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    Parser(expression_grammar(), cache_dir=cache_dir)
     cache_file = only_cache_file(cache_dir)
     cache_file.write_text(contents, encoding="utf-8")
 
-    rebuilt = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    rebuilt = Parser(expression_grammar(), cache_dir=cache_dir)
 
     assert rebuilt.cache_hit is False
     assert_expression_result(
@@ -380,17 +346,17 @@ def test_corrupt_cache_is_rebuilt(
     monkeypatch.setattr(
         parser_module, "compute_lalr1_lookaheads", fail_if_table_is_built
     )
-    cached = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    cached = Parser(expression_grammar(), cache_dir=cache_dir)
     assert cached.cache_hit is True
 
 
 def test_deeply_nested_cache_is_rebuilt(tmp_path: Path) -> None:
     cache_dir = tmp_path / "deeply-nested"
-    Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    Parser(expression_grammar(), cache_dir=cache_dir)
     cache_file = only_cache_file(cache_dir)
     cache_file.write_text("[" * 10_000 + "]" * 10_000, encoding="utf-8")
 
-    rebuilt = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    rebuilt = Parser(expression_grammar(), cache_dir=cache_dir)
 
     assert rebuilt.cache_hit is False
     assert_expression_result(
@@ -402,7 +368,7 @@ def test_cache_io_failure_does_not_break_parser(tmp_path: Path) -> None:
     cache_dir = tmp_path / "cache-is-a-file"
     cache_dir.write_text("not a directory", encoding="utf-8")
 
-    parser = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    parser = Parser(expression_grammar(), cache_dir=cache_dir)
 
     assert parser.cache_hit is False
     assert_expression_result(
@@ -419,7 +385,7 @@ def test_concurrent_cache_initialization_is_atomic(
 
     def construct_and_parse(task_index: int) -> object:
         barrier.wait()
-        parser = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+        parser = Parser(expression_grammar(), cache_dir=cache_dir)
         return parser.parse("expr", expression_tokens())
 
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -431,5 +397,5 @@ def test_concurrent_cache_initialization_is_atomic(
     monkeypatch.setattr(
         parser_module, "compute_lalr1_lookaheads", fail_if_table_is_built
     )
-    cached = Parser(expression_grammar(), eos=EOS, cache_dir=cache_dir)
+    cached = Parser(expression_grammar(), cache_dir=cache_dir)
     assert cached.cache_hit is True

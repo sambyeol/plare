@@ -42,6 +42,10 @@ from plare.token import Token
 from plare.utils import logger
 
 
+class EOS(Token):
+    """Parse-table symbol used when the token stream is exhausted."""
+
+
 class EPSILON(Token):
     """Sentinel token representing the empty string (ε) in FIRST sets."""
 
@@ -714,8 +718,6 @@ def compute_lalr1_lookaheads[T](
     goto_map: dict[tuple[int, Symbol], int],
     all_items: dict[str, set[Item[T]]],
     first_sets: dict[str, set[type[Token]]],
-    *,
-    eos: type[Token],
 ) -> dict[tuple[int, Item[T]], set[type[Token]]]:
     """Compute LALR(1) lookahead sets for all kernel items in the LR(0) automaton.
 
@@ -726,7 +728,7 @@ def compute_lalr1_lookaheads[T](
     The algorithm has four phases:
 
     1. Initialise empty lookahead sets and propagation lists for every kernel item.
-    2. Seed the end-of-stream token class into the entry-state lookahead sets.
+    2. Seed ``EOS`` into the lookahead sets of the entry-state kernel items.
     3. For each kernel item k, run ``closure_lr1({(k, DUMMY_LOOKAHEAD)}, ...)``.
        Items in the result whose lookahead is a real token contribute that token
        spontaneously to the target kernel item; items whose lookahead is still
@@ -740,7 +742,6 @@ def compute_lalr1_lookaheads[T](
         goto_map: Mapping ``(state_id, symbol)`` → target state id.
         all_items: Mapping non-terminal name → its initial LR(0) items.
         first_sets: Precomputed FIRST sets from ``compute_first_sets``.
-        eos: The end-of-stream token class.
 
     Returns:
         Mapping ``(state_id, kernel_item)`` → set of LALR(1) lookahead token
@@ -765,7 +766,7 @@ def compute_lalr1_lookaheads[T](
         for item in rule.items:
             entry_key: tuple[int, Item[T]] = (sid, item)
             if entry_key in lookahead_table:
-                lookahead_table[entry_key].add(eos)
+                lookahead_table[entry_key].add(EOS)
 
     for state in state_list:
         for item in state.items:
@@ -863,24 +864,22 @@ def cache_str(value: object) -> str:
 
 
 def encode_cache_symbol(
-    symbol: Symbol, token_ids: dict[type[Token], int], *, eos: type[Token]
+    symbol: Symbol, token_ids: dict[type[Token], int]
 ) -> list[str | int]:
-    if symbol is eos:
+    if symbol is EOS:
         return ["eos"]
     if isinstance(symbol, type):
         return ["token", token_ids[symbol]]
     return ["nonterminal", symbol]
 
 
-def decode_cache_symbol(
-    value: object, tokens: list[type[Token]], *, eos: type[Token]
-) -> Symbol:
+def decode_cache_symbol(value: object, tokens: list[type[Token]]) -> Symbol:
     encoded = cache_list(value)
     if not encoded:
         raise InvalidParseTableCache("empty symbol")
     kind = cache_str(encoded[0])
     if kind == "eos" and len(encoded) == 1:
-        return eos
+        return EOS
     if kind == "token" and len(encoded) == 2:
         token_id = cache_int(encoded[1])
         if 0 <= token_id < len(tokens):
@@ -950,15 +949,13 @@ def encode_parse_table_cache[T](
     table: Table[T],
     entry_state: dict[str, int],
     token_ids: dict[type[Token], int],
-    *,
-    eos: type[Token],
 ) -> dict[str, object]:
     rows: list[object] = []
     for row in table.table:
         rows.append(
             [
                 [
-                    encode_cache_symbol(symbol, token_ids, eos=eos),
+                    encode_cache_symbol(symbol, token_ids),
                     encode_cache_action(action),
                 ]
                 for symbol, action in row.items()
@@ -982,8 +979,6 @@ def decode_parse_table_cache[T](
     tokens: list[type[Token]],
     reductions: dict[int, Reduce[T]],
     entry_names: list[str],
-    *,
-    eos: type[Token],
 ) -> tuple[Table[T], dict[str, int]]:
     payload = cache_dict(raw)
     if cache_str(payload.get("version")) != plare.__version__:
@@ -1013,7 +1008,7 @@ def decode_parse_table_cache[T](
             cell = cache_list(encoded_cell)
             if len(cell) != 2:
                 raise InvalidParseTableCache("invalid table cell")
-            symbol = decode_cache_symbol(cell[0], tokens, eos=eos)
+            symbol = decode_cache_symbol(cell[0], tokens)
             action = decode_cache_action(cell[1], state_count, reductions, entry_names)
             if isinstance(symbol, type):
                 if isinstance(action, Goto):
@@ -1035,14 +1030,12 @@ def load_parse_table_cache[T](
     tokens: list[type[Token]],
     reductions: dict[int, Reduce[T]],
     entry_names: list[str],
-    *,
-    eos: type[Token],
 ) -> tuple[Table[T], dict[str, int]] | None:
     try:
         with path.open(encoding="utf-8") as cache_file:
             raw = cast(object, json.load(cache_file))
         return decode_parse_table_cache(
-            raw, fingerprint, tokens, reductions, entry_names, eos=eos
+            raw, fingerprint, tokens, reductions, entry_names
         )
     except FileNotFoundError:
         return None
@@ -1129,15 +1122,11 @@ def write_parse_table_cache[T](
     table: Table[T],
     entry_state: dict[str, int],
     token_ids: dict[type[Token], int],
-    *,
-    eos: type[Token],
 ) -> None:
     temporary_path: Path | None = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = encode_parse_table_cache(
-            fingerprint, table, entry_state, token_ids, eos=eos
-        )
+        payload = encode_parse_table_cache(fingerprint, table, entry_state, token_ids)
         with NamedTemporaryFile(
             mode="w",
             encoding="utf-8",
@@ -1172,9 +1161,8 @@ def write_parse_table_cache[T](
 class Parser[T]:
     """LALR(1) parser that builds a parse table from a grammar and drives LR parsing.
 
-    Construct a ``Parser`` from a grammar dict and a caller-defined end-of-stream
-    token class passed as ``eos``. Call ``parse`` repeatedly for different inputs.
-    The end-of-stream token class is reserved for the final token in the stream.
+    Construct a ``Parser`` once from a grammar dict; then call ``parse``
+    repeatedly for different inputs.
 
     Grammar format::
 
@@ -1228,14 +1216,8 @@ class Parser[T]:
             ],
         ],
         *,
-        eos: type[Token],
         cache_dir: str | os.PathLike[str] | None = ".plare",
     ) -> None:
-        end_token = cast(object, eos)
-        if not isinstance(end_token, type) or not issubclass(end_token, Token):
-            raise ParserError("eos must be a Token subclass")
-        self._eos = eos
-
         # ── Phase 1: Augment grammar ─────────────────────────────────────────
         # For each entry non-terminal X, add an augmented rule
         #   StartVariable(X) → X
@@ -1267,10 +1249,6 @@ class Parser[T]:
                     prec_override = None
                 normalized_right: list[type[Token] | str] = []
                 for symbol in right:
-                    if symbol is eos:
-                        raise ParserError(
-                            f"End token {eos.__name__} cannot appear in rule {left!r}"
-                        )
                     if isinstance(symbol, str) and symbol not in grammar:
                         raise ParserError(
                             f"Undefined nonterminal {symbol!r} in rule {left!r}"
@@ -1324,7 +1302,6 @@ class Parser[T]:
                 cache_tokens,
                 reductions,
                 entry_names,
-                eos=eos,
             )
             if cached is not None:
                 self.table, self.entry_state = cached
@@ -1385,13 +1362,7 @@ class Parser[T]:
         }
         entry_state_ids = [self.entry_state[left.orig] for left, _ in entry_rules]
         lookahead_table = compute_lalr1_lookaheads(
-            state_list,
-            entry_rules,
-            entry_state_ids,
-            goto_map,
-            all_items,
-            first_sets,
-            eos=eos,
+            state_list, entry_rules, entry_state_ids, goto_map, all_items, first_sets
         )
         for state in state_list:
             state.lookaheads = {
@@ -1425,7 +1396,7 @@ class Parser[T]:
             for item in state.items:
                 if item.next is None:
                     if item.left in start_variables:
-                        self.table[state.id, eos] = Accept(
+                        self.table[state.id, EOS] = Accept(
                             item.left.orig
                             if isinstance(item.left, StartVariable)
                             else item.left
@@ -1474,7 +1445,6 @@ class Parser[T]:
                 self.table,
                 self.entry_state,
                 cache_token_ids,
-                eos=eos,
             )
         logger.info("Parser created")
 
@@ -1485,7 +1455,8 @@ class Parser[T]:
         maintain a state stack and a symbol stack; on each step look up the
         action for the current state and lookahead token class.
 
-        The ``key`` variable holds the current lookahead *class* (not instance).
+        The ``key`` variable holds the current lookahead token class, using
+        ``EOS`` when the token stream is exhausted.
         After a ``Reduce`` the driver does *not* consume a new token; instead it
         sets ``key = left`` (the reduced non-terminal) and re-enters the action
         lookup, which will find a ``Goto`` action to push the new state.
@@ -1493,16 +1464,16 @@ class Parser[T]:
         Args:
             var: The entry non-terminal to parse (must be a key in the grammar
                 passed to ``__init__``).
-            lexbuf: An iterable of ``Token`` instances ending in exactly one
-                instance of the configured ``eos`` class. In a lexer, register
-                that class with ``r"\\Z"`` in each state where input may end.
+            lexbuf: An iterable of ``Token`` instances produced by the lexer.
 
         Returns:
             The root value produced by the top-level semantic action.
 
         Raises:
-            ParsingError: On unknown start rule, unexpected token or end of
-                input, a missing or misplaced end token, or an invalid action.
+            ParsingError: On unknown start rule, unexpected token or end of input,
+                missing action, or wrong acceptance symbol. An unexpected end
+                uses the last token's position, or line 1, column 0 for an empty
+                stream.
         """
         try:
             state = self.entry_state[var]
@@ -1515,62 +1486,47 @@ class Parser[T]:
                 expected=[],
             ) from None
 
-        eos = self._eos
         tokens = iter(lexbuf)
         stack = [state]
         symbols = list[T | Token]()
 
-        key: type[Token] | str | None = None
-        token: Token | None = None
+        key: Symbol | None = None
+        token = next(tokens, None)
         last_token: Token | None = None
+
+        def parsing_error(message: str) -> ParsingError:
+            position = token if token is not None else last_token
+            return ParsingError(
+                message,
+                token=token,
+                lineno=position.lineno if position is not None else 1,
+                offset=position.offset if position is not None else 0,
+                expected=self.table.expected_tokens(state),
+            )
+
         while True:
-            if token is None:
-                token = next(tokens, None)
-                if token is None:
-                    raise ParsingError(
-                        f"Token stream ended without {eos.__name__}",
-                        token=None,
-                        lineno=last_token.lineno if last_token is not None else 1,
-                        offset=last_token.offset if last_token is not None else 0,
-                        expected=self.table.expected_tokens(state),
-                    )
-                if type(token) is eos:
-                    trailing = next(tokens, None)
-                    if trailing is not None:
-                        raise ParsingError(
-                            f"Unexpected token after {eos.__name__}: {type(trailing).__name__}",
-                            token=trailing,
-                            lineno=trailing.lineno,
-                            offset=trailing.offset,
-                            expected=[],
-                        )
             if key is None:
-                key = type(token)
+                key = type(token) if token is not None else EOS
 
             try:
                 action = self.table[state, key]
             except KeyError:
-                unexpected_end = key is eos
-                raise ParsingError(
-                    (
-                        "Unexpected end of input"
-                        if unexpected_end
-                        else f"Unexpected token: {type(token).__name__}"
-                    ),
-                    token=None if unexpected_end else token,
-                    lineno=token.lineno,
-                    offset=token.offset,
-                    expected=self.table.expected_tokens(state),
+                raise parsing_error(
+                    "Unexpected end of input"
+                    if token is None
+                    else f"Unexpected token: {type(token).__name__}"
                 ) from None
             logger.debug("State: %d, Symbol: %s, Action: %s", state, key, action)
-            key = None
             match action:
                 case Shift(next=n):
+                    if token is None:
+                        raise parsing_error("Unexpected end of input")
                     state = n
                     stack.append(state)
                     symbols.append(token)
                     last_token = token
-                    token = None
+                    token = next(tokens, None)
+                    key = None
 
                 case Reduce(left, n, maker):
                     if n > 0:
@@ -1594,25 +1550,14 @@ class Parser[T]:
                 case Goto(next=n):
                     state = n
                     stack.append(state)
+                    key = None
 
                 case Accept(symbol):
                     if symbol != var:
-                        raise ParsingError(
-                            f"Unexpected symbol parsed: {symbol}",
-                            token=token,
-                            lineno=token.lineno,
-                            offset=token.offset,
-                            expected=self.table.expected_tokens(state),
-                        )
-                    break
+                        raise parsing_error(f"Unexpected symbol parsed: {symbol}")
+                    if token is not None:
+                        raise parsing_error(f"Unexpected token: {type(token).__name__}")
+                    return symbols[-1]
 
                 case _:
-                    raise ParsingError(
-                        f"No action for state {state} and symbol {key}",
-                        token=token,
-                        lineno=token.lineno,
-                        offset=token.offset,
-                        expected=self.table.expected_tokens(state),
-                    )
-
-        return symbols[-1]
+                    raise parsing_error(f"No action for state {state} and symbol {key}")

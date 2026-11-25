@@ -13,11 +13,6 @@ from plare.exception import ParsingError
 from plare.parser import Parser
 from plare.token import Token
 
-
-class EOS(Token):
-    pass
-
-
 type GrammarRules[T] = (
     tuple[list[type[Token] | str], type[T] | None, list[int]]
     | tuple[list[type[Token] | str], type[T] | None, list[int], type[Token]]
@@ -74,14 +69,13 @@ def test_epsilon_optional_suffix() -> None:
             ([], NoLabel, []),
         ],
     }
-    p = Parser(grammar, eos=EOS, cache_dir=None)
+    p = Parser(grammar, cache_dir=None)
 
     result_no = p.parse(
         "stmt",
         [
             ID_T("x", lineno=1, offset=0),
             SEMI_T(";", lineno=1, offset=1),
-            EOS("", lineno=1, offset=2),
         ],
     )
     assert isinstance(result_no, Stmt)
@@ -93,7 +87,6 @@ def test_epsilon_optional_suffix() -> None:
             ID_T("x", lineno=1, offset=0),
             SEMI_T(";", lineno=1, offset=1),
             LABEL_T("l", lineno=1, offset=2),
-            EOS("", lineno=1, offset=3),
         ],
     )
     assert isinstance(result_yes, Stmt)
@@ -145,7 +138,7 @@ def test_left_recursive_addition_chain() -> None:
         ],
         "num": [([NUM2], Num2, [0])],
     }
-    p = Parser(grammar, eos=EOS, cache_dir=None)
+    p = Parser(grammar, cache_dir=None)
 
     result = p.parse(
         "expr",
@@ -155,7 +148,6 @@ def test_left_recursive_addition_chain() -> None:
             NUM2("2", lineno=1, offset=2),
             PLUS2("+", lineno=1, offset=3),
             NUM2("3", lineno=1, offset=4),
-            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, Add2)
@@ -212,7 +204,7 @@ def test_right_recursive_cons_list() -> None:
         ],
         "num": [([NUM3], Num3, [0])],
     }
-    p = Parser(grammar, eos=EOS, cache_dir=None)
+    p = Parser(grammar, cache_dir=None)
 
     result = p.parse(
         "list",
@@ -222,7 +214,6 @@ def test_right_recursive_cons_list() -> None:
             NUM3("2", lineno=1, offset=3),
             CONS3("::", lineno=1, offset=4),
             NUM3("3", lineno=1, offset=6),
-            EOS("", lineno=1, offset=7),
         ],
     )
     assert isinstance(result, Cons3)
@@ -294,7 +285,6 @@ def test_operator_precedence_mul_over_add() -> None:
                 ([NUM4], Num4, [0]),
             ]
         },
-        eos=EOS,
         cache_dir=None,
     )
 
@@ -307,7 +297,6 @@ def test_operator_precedence_mul_over_add() -> None:
             NUM4("2", lineno=1, offset=2),
             STAR4("*", lineno=1, offset=3),
             NUM4("3", lineno=1, offset=4),
-            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, Add4), "'+' should be root because '*' binds tighter"
@@ -365,7 +354,6 @@ def test_left_associative_subtraction() -> None:
                 ([NUM5], Num5, [0]),
             ]
         },
-        eos=EOS,
         cache_dir=None,
     )
 
@@ -378,7 +366,6 @@ def test_left_associative_subtraction() -> None:
             NUM5("2", lineno=1, offset=2),
             MINUS5("-", lineno=1, offset=3),
             NUM5("3", lineno=1, offset=4),
-            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, Sub5)
@@ -436,7 +423,6 @@ def test_right_associative_exponentiation() -> None:
                 ([NUM6], Num6, [0]),
             ]
         },
-        eos=EOS,
         cache_dir=None,
     )
 
@@ -449,7 +435,6 @@ def test_right_associative_exponentiation() -> None:
             NUM6("3", lineno=1, offset=2),
             POW6("^", lineno=1, offset=3),
             NUM6("4", lineno=1, offset=4),
-            EOS("", lineno=1, offset=5),
         ],
     )
     assert isinstance(result, Pow6)
@@ -502,21 +487,18 @@ def test_multiple_entry_points() -> None:
         "str_expr": [([WORD7], StrVal, [0])],
         "int_expr": [([NUM7], IntVal, [0])],
     }
-    p = Parser(grammar, eos=EOS, cache_dir=None)
+    p = Parser(grammar, cache_dir=None)
 
-    str_result = p.parse(
-        "str_expr", [WORD7("hello", lineno=1, offset=0), EOS("", lineno=1, offset=5)]
-    )
+    str_result = p.parse("str_expr", [WORD7("hello", lineno=1, offset=0)])
     assert isinstance(str_result, StrVal)
     assert str_result.value == "hello"
 
-    int_tokens = [NUM7("42", lineno=1, offset=0), EOS("", lineno=1, offset=2)]
-    int_result = p.parse("int_expr", int_tokens)
+    int_result = p.parse("int_expr", [NUM7("42", lineno=1, offset=0)])
     assert isinstance(int_result, IntVal)
     assert int_result.value == 42
 
     with pytest.raises(ParsingError):
-        p.parse("str_expr", int_tokens)
+        p.parse("str_expr", [NUM7("42", lineno=1, offset=0)])
 
 
 # ---------------------------------------------------------------------------
@@ -565,7 +547,6 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
                 ([NUM8], Num8, [0]),
             ]
         },
-        eos=EOS,
         cache_dir=None,
     )
 
@@ -575,7 +556,6 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
             NUM8("1", lineno=1, offset=0),
             PLUS8("+", lineno=1, offset=1),
             NUM8("2", lineno=1, offset=2),
-            EOS("", lineno=1, offset=3),
         ],
     )
     assert isinstance(result, Add8)
@@ -647,7 +627,6 @@ def test_lalr1_resolves_rr_conflict_variant_1() -> None:
             "A_nt": [([E8x], None, [0])],
             "B_nt": [([E8x], None, [0])],
         },
-        eos=EOS,
         cache_dir=None,
     )
     result = p.parse(
@@ -656,7 +635,6 @@ def test_lalr1_resolves_rr_conflict_variant_1() -> None:
             A8x("a", lineno=1, offset=0),
             E8x("e", lineno=1, offset=1),
             C8x("c", lineno=1, offset=2),
-            EOS("", lineno=1, offset=3),
         ],
     )
     assert isinstance(result, Node8x)
@@ -710,7 +688,6 @@ def test_lalr1_resolves_rr_conflict_variant_2() -> None:
             "X_nt": [([T8y], None, [0])],
             "Y_nt": [([T8y], None, [0])],
         },
-        eos=EOS,
         cache_dir=None,
     )
     result = p.parse(
@@ -719,7 +696,6 @@ def test_lalr1_resolves_rr_conflict_variant_2() -> None:
             P8y("p", lineno=1, offset=0),
             T8y("t", lineno=1, offset=1),
             R8y("r", lineno=1, offset=2),
-            EOS("", lineno=1, offset=3),
         ],
     )
     assert isinstance(result, Node8y)

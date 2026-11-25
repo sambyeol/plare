@@ -6,10 +6,6 @@ from plare.parser import Parser
 from plare.token import Token
 
 
-class EOS(Token):
-    pass
-
-
 class PLUS(Token):
     pass
 
@@ -55,23 +51,20 @@ def make_positive_integer_parser() -> Parser[Tree]:
                 ([NUM], Num, [0]),
             ],
         },
-        eos=EOS,
         cache_dir=None,
     )
 
 
 def test_parse_positive_integer_without_add():
     parser = make_positive_integer_parser()
-    tree = parser.parse(
-        "pgm", [NUM("1", lineno=1, offset=0), EOS("", lineno=1, offset=1)]
-    )
+    tree = parser.parse("pgm", [NUM("1", lineno=1, offset=0)])
     assert isinstance(tree, Num)
     assert tree.value == 1
 
 
 def test_minimal_empty_rule_parser():
-    parser = Parser({"pgm": [([], list[int], [])]}, eos=EOS, cache_dir=None)
-    parsed = parser.parse("pgm", [EOS("", lineno=1, offset=0)])
+    parser = Parser({"pgm": [([], list[int], [])]}, cache_dir=None)
+    parsed = parser.parse("pgm", [])
     assert isinstance(parsed, list)
     assert len(parsed) == 0
 
@@ -111,7 +104,6 @@ def make_list_parser() -> Parser[IntList]:
                 ([], EmptyIntList, []),
             ],
         },
-        eos=EOS,
         cache_dir=None,
     )
 
@@ -123,7 +115,6 @@ def test_parse_empty_intlist():
         [
             LBRACKET("[", lineno=1, offset=0),
             RBRACKET("]", lineno=1, offset=1),
-            EOS("", lineno=1, offset=2),
         ],
     )
     assert isinstance(tree, IntList)

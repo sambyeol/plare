@@ -96,10 +96,6 @@ class RPAREN(Token):
     pass
 
 
-class EOS(Token):
-    pass
-
-
 def calc(exp: Exp) -> int:
     match exp:
         case Const(value):
@@ -134,12 +130,10 @@ def main():
                 (r"/", SLASH),
                 (r"\(", LPAREN),
                 (r"\)", RPAREN),
-                (r"\Z", EOS),
             ],
             "comment": [
                 (r"//", "start"),
                 (r".", "comment"),
-                (r"\Z", EOS),
             ],
         },
     )
@@ -154,8 +148,7 @@ def main():
                 (["exp", SLASH, "exp"], Div, [0, 2]),
                 ([LPAREN, "exp", RPAREN], None, [1]),
             ]
-        },
-        eos=EOS,
+        }
     )
 
     print(f"== Source ({args.src}) ==")

@@ -39,10 +39,6 @@ class PLUS(Token):
     pass
 
 
-class End(Token):
-    pass
-
-
 class Exp:
     value: int
 
@@ -57,19 +53,14 @@ class Add(Exp):
         self.value = left.value + right.value
 
 
-lexer: Lexer[None] = Lexer(
-    {"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start"), (r"\Z", End)]}
-)
+lexer: Lexer[None] = Lexer({"start": [(r"\d+", NUM), (r"\+", PLUS), (r" +", "start")]})
 parser: Parser[Exp] = Parser(
-    {"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]},
-    eos=End,
+    {"exp": [(["exp", PLUS, "exp"], Add, [0, 2]), ([NUM], Const, [0])]}
 )
 result = parser.parse("exp", lexer.lex("start", "1 + 2"))
 assert isinstance(result, Exp)
 print(result.value)  # 3
 ```
-
-Define an end token class and pass it to `Parser` as `eos`. Register `(r"\Z", End)` in each lexer state where input can end. When supplying tokens directly to `Parser.parse()`, include one instance of the configured class as the final token with the end-of-input position.
 
 ## Examples
 

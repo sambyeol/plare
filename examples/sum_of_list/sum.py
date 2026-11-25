@@ -38,10 +38,6 @@ class COMMA(Token):
     pass
 
 
-class EOS(Token):
-    pass
-
-
 class IntList:
     items: list[int]
 
@@ -72,7 +68,6 @@ def main() -> None:
                 (r"\]", RBRACKET),
                 (r",", COMMA),
                 (r"-?\d+", NUM),
-                (r"\Z", EOS),
             ]
         }
     )
@@ -87,8 +82,7 @@ def main() -> None:
                 ([NUM], SingleIntList, [0]),
                 ([], EmptyIntList, []),
             ],
-        },
-        eos=EOS,
+        }
     )
 
     lexbuf = lexer.lex("start", args.input)

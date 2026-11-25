@@ -33,11 +33,6 @@ from plare.lexer import Lexer
 from plare.parser import Parser
 from plare.token import Token
 
-
-class EOS(Token):
-    pass
-
-
 # ---------------------------------------------------------------------------
 # Token definitions
 # ---------------------------------------------------------------------------
@@ -334,7 +329,6 @@ expr_lexer: Lexer[None] = Lexer(
             (r"\(", LPAREN),
             (r"\)", RPAREN),
             (r"[a-zA-Z_]\w*", lex_word),
-            (r"\Z", EOS),
         ]
     }
 )
@@ -372,7 +366,6 @@ expr_parser: Parser[Expr] = Parser(
             ([LET, ID, EQ, "expr", IN, "expr"], LetExpr, [1, 3, 5]),
         ]
     },
-    eos=EOS,
     cache_dir=None,
 )
 
@@ -676,7 +669,7 @@ def test_parsing_error_on_unclosed_paren() -> None:
 
 
 def test_parsing_error_on_empty_input() -> None:
-    """An empty source (no expression) raises ParsingError."""
+    """An empty token stream (no expression) raises ParsingError."""
     with pytest.raises(ParsingError):
         parse_eval("")
 
