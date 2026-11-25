@@ -25,9 +25,9 @@ That is, you need to define 3 different types of list, which are initialized wit
 ## Defining Lexer
 A lexer will tokenize the given source string.
 To make a lexer, all you need to do is define token classes that inherit from `Token`.
-In this example, you only need to define 4 tokens: `COMMA`, `LBRACKET`, `RBRACKET`, and `NUM`.
+This example defines five token classes including `COMMA`, `LBRACKET`, `RBRACKET`, `NUM`, and the end token `EOS`.
 
-Register `(r"\Z", EOS)` with `EOS` from `plare.parser` so the lexer supplies the parser's final token.
+Register `(r"\Z", EOS)` in the lexer and pass the same class to `Parser` as `eos=EOS`.
 
 ## Defining Parser
 A parser will parse the tokens and build an AST.

@@ -10,8 +10,13 @@ from __future__ import annotations
 import pytest
 
 from plare.exception import ParsingError
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
+
+
+class EOS(Token):
+    pass
+
 
 type GrammarRules[T] = (
     tuple[list[type[Token] | str], type[T] | None, list[int]]
@@ -69,7 +74,7 @@ def test_epsilon_optional_suffix() -> None:
             ([], NoLabel, []),
         ],
     }
-    p = Parser(grammar, cache_dir=None)
+    p = Parser(grammar, eos=EOS, cache_dir=None)
 
     result_no = p.parse(
         "stmt",
@@ -140,7 +145,7 @@ def test_left_recursive_addition_chain() -> None:
         ],
         "num": [([NUM2], Num2, [0])],
     }
-    p = Parser(grammar, cache_dir=None)
+    p = Parser(grammar, eos=EOS, cache_dir=None)
 
     result = p.parse(
         "expr",
@@ -207,7 +212,7 @@ def test_right_recursive_cons_list() -> None:
         ],
         "num": [([NUM3], Num3, [0])],
     }
-    p = Parser(grammar, cache_dir=None)
+    p = Parser(grammar, eos=EOS, cache_dir=None)
 
     result = p.parse(
         "list",
@@ -289,6 +294,7 @@ def test_operator_precedence_mul_over_add() -> None:
                 ([NUM4], Num4, [0]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -359,6 +365,7 @@ def test_left_associative_subtraction() -> None:
                 ([NUM5], Num5, [0]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -429,6 +436,7 @@ def test_right_associative_exponentiation() -> None:
                 ([NUM6], Num6, [0]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -494,7 +502,7 @@ def test_multiple_entry_points() -> None:
         "str_expr": [([WORD7], StrVal, [0])],
         "int_expr": [([NUM7], IntVal, [0])],
     }
-    p = Parser(grammar, cache_dir=None)
+    p = Parser(grammar, eos=EOS, cache_dir=None)
 
     str_result = p.parse(
         "str_expr", [WORD7("hello", lineno=1, offset=0), EOS("", lineno=1, offset=5)]
@@ -557,6 +565,7 @@ def test_shift_reduce_resolution_prefers_shift() -> None:
                 ([NUM8], Num8, [0]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -638,6 +647,7 @@ def test_lalr1_resolves_rr_conflict_variant_1() -> None:
             "A_nt": [([E8x], None, [0])],
             "B_nt": [([E8x], None, [0])],
         },
+        eos=EOS,
         cache_dir=None,
     )
     result = p.parse(
@@ -700,6 +710,7 @@ def test_lalr1_resolves_rr_conflict_variant_2() -> None:
             "X_nt": [([T8y], None, [0])],
             "Y_nt": [([T8y], None, [0])],
         },
+        eos=EOS,
         cache_dir=None,
     )
     result = p.parse(

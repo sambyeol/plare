@@ -30,8 +30,13 @@ import pytest
 
 from plare.exception import LexingError, ParsingError
 from plare.lexer import Lexer
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
+
+
+class EOS(Token):
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Token definitions
@@ -367,6 +372,7 @@ expr_parser: Parser[Expr] = Parser(
             ([LET, ID, EQ, "expr", IN, "expr"], LetExpr, [1, 3, 5]),
         ]
     },
+    eos=EOS,
     cache_dir=None,
 )
 

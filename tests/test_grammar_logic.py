@@ -14,8 +14,13 @@ import pytest
 
 from plare.exception import ParsingError
 from plare.lexer import Lexer
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
+
+
+class EOS(Token):
+    pass
+
 
 type GrammarDict[T] = dict[
     str,
@@ -140,7 +145,7 @@ CALC_LEXER = Lexer(
     }
 )
 
-calc_parser = Parser(CALC_GRAMMAR, cache_dir=None)
+calc_parser = Parser(CALC_GRAMMAR, eos=EOS, cache_dir=None)
 
 
 def num(v: int, o: int = 0) -> NUM_C:
@@ -298,6 +303,7 @@ def test_default_sr_conflict_is_left_associative() -> None:
                 ([NUM_SR], NumSR, [0]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
     result = p.parse(
@@ -389,6 +395,7 @@ def test_dangling_else_inner_if_gets_else() -> None:
                 ([BASE_D], BaseStmtD, [0]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
     tokens = [
@@ -479,6 +486,7 @@ unary_parser = Parser(
             ([MINUS_UP, "expr"], NegUP, [1], UMINUS_UP),  # prec override → 3
         ]
     },
+    eos=EOS,
     cache_dir=None,
 )
 
@@ -581,7 +589,7 @@ LIST_GRAMMAR: GrammarDict[ListL | EmptyListL | ConsItemsL | SingleItemL] = {
         ([NUM_L], SingleItemL, [0]),
     ],
 }
-list_parser = Parser(LIST_GRAMMAR, cache_dir=None)
+list_parser = Parser(LIST_GRAMMAR, eos=EOS, cache_dir=None)
 
 
 def num_l(v: int, o: int = 0) -> NUM_L:
@@ -701,7 +709,7 @@ CALL_GRAMMAR: GrammarDict[CallF | NoArgCallF | ConsArgsF | SingleArgF] = {
         ([NUM_F], SingleArgF, [0]),
     ],
 }
-call_parser = Parser(CALL_GRAMMAR, cache_dir=None)
+call_parser = Parser(CALL_GRAMMAR, eos=EOS, cache_dir=None)
 
 
 def num_f(v: int, o: int = 0) -> NUM_F:
@@ -896,7 +904,7 @@ PROGRAM_GRAMMAR: GrammarDict[ProgramE | NonEmptyStmtsE | EmptyStmtsE] = {
         ([], EmptyStmtsE, []),
     ],
 }
-program_parser = Parser(PROGRAM_GRAMMAR, cache_dir=None)
+program_parser = Parser(PROGRAM_GRAMMAR, eos=EOS, cache_dir=None)
 
 
 def test_empty_program() -> None:

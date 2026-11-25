@@ -12,8 +12,13 @@ from pathlib import Path
 
 import pytest
 
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
+
+
+class EOS(Token):
+    pass
+
 
 # ---------------------------------------------------------------------------
 # Token definitions
@@ -94,6 +99,7 @@ def parser_with_prec_override() -> Parser[Expr]:
                 ([MINUS, "expr"], Neg, [1], UMINUS),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -108,6 +114,7 @@ def parser_without_prec_override() -> Parser[Expr]:
                 ([MINUS, "expr"], Neg, [1]),
             ]
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -206,7 +213,7 @@ def test_rr_equal_precedence_first_defined_wins() -> None:
         "first_val": [([Lit], None, [0])],
         "second_val": [([Lit], None, [0])],
     }
-    parser = Parser(grammar, cache_dir=None)
+    parser = Parser(grammar, eos=EOS, cache_dir=None)
     result = parser.parse(
         "result", [Lit("x", lineno=1, offset=0), EOS("", lineno=1, offset=1)]
     )
@@ -233,6 +240,7 @@ def test_rr_duplicate_productions_respect_precedence(
                     ([Lit], SecondResult, [0], prec_token),
                 ],
             },
+            eos=EOS,
             cache_dir=tmp_path,
         )
         assert parser.cache_hit is cache_hit

@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from typing import Any
 
 from plare.lexer import Lexer
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
 
 
@@ -35,6 +35,10 @@ class RBRACKET(Token):
 
 
 class COMMA(Token):
+    pass
+
+
+class EOS(Token):
     pass
 
 
@@ -83,7 +87,8 @@ def main() -> None:
                 ([NUM], SingleIntList, [0]),
                 ([], EmptyIntList, []),
             ],
-        }
+        },
+        eos=EOS,
     )
 
     lexbuf = lexer.lex("start", args.input)

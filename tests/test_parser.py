@@ -2,8 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
+
+
+class EOS(Token):
+    pass
 
 
 class PLUS(Token):
@@ -51,6 +55,7 @@ def make_positive_integer_parser() -> Parser[Tree]:
                 ([NUM], Num, [0]),
             ],
         },
+        eos=EOS,
         cache_dir=None,
     )
 
@@ -65,7 +70,7 @@ def test_parse_positive_integer_without_add():
 
 
 def test_minimal_empty_rule_parser():
-    parser = Parser({"pgm": [([], list[int], [])]}, cache_dir=None)
+    parser = Parser({"pgm": [([], list[int], [])]}, eos=EOS, cache_dir=None)
     parsed = parser.parse("pgm", [EOS("", lineno=1, offset=0)])
     assert isinstance(parsed, list)
     assert len(parsed) == 0
@@ -106,6 +111,7 @@ def make_list_parser() -> Parser[IntList]:
                 ([], EmptyIntList, []),
             ],
         },
+        eos=EOS,
         cache_dir=None,
     )
 

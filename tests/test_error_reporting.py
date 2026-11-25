@@ -8,8 +8,13 @@ import pytest
 
 from plare.exception import LexingError, ParserError, ParsingError
 from plare.lexer import Lexer
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
+
+
+class EOS(Token):
+    pass
+
 
 type GrammarEntry[T] = (
     tuple[list[type[Token] | str], type[T] | None, list[int]]
@@ -48,6 +53,18 @@ def make_tok(cls: type[Token], *, lineno: int = 1, offset: int = 0) -> Token:
     return cls("x", lineno=lineno, offset=offset)
 
 
+def test_parser_error_eos_must_be_a_token_class() -> None:
+    with pytest.raises(ParserError, match="eos must be a Token subclass"):
+        Parser(GRAMMAR, eos=Expr, cache_dir=None)  # pyright: ignore[reportArgumentType]
+
+
+def test_parser_error_eos_cannot_appear_in_a_production() -> None:
+    with pytest.raises(
+        ParserError, match=r"End token EOS cannot appear in rule 'expr'"
+    ):
+        Parser[Expr]({"expr": [([Num, EOS], None, [0])]}, eos=EOS, cache_dir=None)
+
+
 # ---------------------------------------------------------------------------
 # ParserError — undefined nonterminal
 # ---------------------------------------------------------------------------
@@ -64,7 +81,7 @@ def test_parser_error_undefined_nonterminal(
     cache_dir = tmp_path if use_cache else None
 
     with pytest.raises(ParserError) as exc_info:
-        Parser[Expr]({"expr": [(right, None, [0])]}, cache_dir=cache_dir)
+        Parser[Expr]({"expr": [(right, None, [0])]}, eos=EOS, cache_dir=cache_dir)
 
     message = str(exc_info.value)
     assert "'term'" in message
@@ -83,8 +100,8 @@ def test_unknown_start_rule(use_cache: bool, tmp_path: Path) -> None:
     """Both built and cached parsers identify the requested start rule."""
     cache_dir = tmp_path if use_cache else None
     if use_cache:
-        Parser(GRAMMAR, cache_dir=cache_dir)
-    parser = Parser(GRAMMAR, cache_dir=cache_dir)
+        Parser(GRAMMAR, eos=EOS, cache_dir=cache_dir)
+    parser = Parser(GRAMMAR, eos=EOS, cache_dir=cache_dir)
     assert parser.cache_hit is use_cache
 
     with pytest.raises(ParsingError, match=r"Unknown start rule 'typo'") as exc_info:
@@ -110,7 +127,7 @@ def test_unknown_start_rule(use_cache: bool, tmp_path: Path) -> None:
 
 def test_parsing_error_unexpected_token_fields() -> None:
     """ParsingError carries the offending token, its position, and expected classes."""
-    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
+    p: Parser[Expr] = Parser(GRAMMAR, eos=EOS, cache_dir=None)
     wrong_tok = make_tok(Plus, lineno=3, offset=7)
 
     with pytest.raises(ParsingError) as exc_info:
@@ -125,7 +142,7 @@ def test_parsing_error_unexpected_token_fields() -> None:
 
 def test_parsing_error_unexpected_token_str() -> None:
     """str(ParsingError) starts with the 'Line X, col Y:' prefix."""
-    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
+    p: Parser[Expr] = Parser(GRAMMAR, eos=EOS, cache_dir=None)
     wrong_tok = make_tok(Plus, lineno=2, offset=5)
 
     with pytest.raises(ParsingError) as exc_info:
@@ -157,7 +174,7 @@ def test_parsing_error_reports_position_of_unexpected_eos(
     lexer: Lexer[None] = Lexer(
         {"start": [(r"\s+", "start"), (r"\d+", Num), (r"\+", Plus), (r"\Z", EOS)]}
     )
-    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
+    p: Parser[Expr] = Parser(GRAMMAR, eos=EOS, cache_dir=None)
 
     with pytest.raises(ParsingError, match="Unexpected end of input") as exc_info:
         p.parse("expr", lexer.lex("start", source))
@@ -181,7 +198,7 @@ def test_parsing_error_requires_explicit_eos(
     tokens: list[Token], position: tuple[int, int]
 ) -> None:
     """Exhaustion without EOS fails even after a complete expression."""
-    p = Parser[Token]({"expr": [([Num], None, [0])]}, cache_dir=None)
+    p = Parser[Token]({"expr": [([Num], None, [0])]}, eos=EOS, cache_dir=None)
 
     with pytest.raises(
         ParsingError, match="Token stream ended without EOS"
@@ -196,7 +213,7 @@ def test_parsing_error_requires_explicit_eos(
 @pytest.mark.parametrize("trailing_kind", [Num, EOS])
 def test_parsing_error_rejects_tokens_after_eos(trailing_kind: type[Token]) -> None:
     """EOS must occur exactly once, at the end of the token stream."""
-    p: Parser[Expr] = Parser(GRAMMAR, cache_dir=None)
+    p: Parser[Expr] = Parser(GRAMMAR, eos=EOS, cache_dir=None)
     trailing = make_tok(trailing_kind, lineno=2, offset=7)
     tokens = [make_tok(kind) for kind in (Num, Plus, Num)]
     tokens.extend([EOS("", lineno=2, offset=3), trailing])

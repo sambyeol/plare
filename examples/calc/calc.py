@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from pathlib import Path
 
 from plare.lexer import Lexer
-from plare.parser import EOS, Parser
+from plare.parser import Parser
 from plare.token import Token
 
 
@@ -96,6 +96,10 @@ class RPAREN(Token):
     pass
 
 
+class EOS(Token):
+    pass
+
+
 def calc(exp: Exp) -> int:
     match exp:
         case Const(value):
@@ -150,7 +154,8 @@ def main():
                 (["exp", SLASH, "exp"], Div, [0, 2]),
                 ([LPAREN, "exp", RPAREN], None, [1]),
             ]
-        }
+        },
+        eos=EOS,
     )
 
     print(f"== Source ({args.src}) ==")
