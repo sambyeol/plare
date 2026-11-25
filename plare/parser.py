@@ -1494,16 +1494,6 @@ class Parser[T]:
         token = next(tokens, None)
         last_token: Token | None = None
 
-        def parsing_error(message: str) -> ParsingError:
-            position = token if token is not None else last_token
-            return ParsingError(
-                message,
-                token=token,
-                lineno=position.lineno if position is not None else 1,
-                offset=position.offset if position is not None else 0,
-                expected=self.table.expected_tokens(state),
-            )
-
         while True:
             if key is None:
                 key = type(token) if token is not None else EOS
@@ -1511,16 +1501,18 @@ class Parser[T]:
             try:
                 action = self.table[state, key]
             except KeyError:
-                raise parsing_error(
+                error_message = (
                     "Unexpected end of input"
                     if token is None
                     else f"Unexpected token: {type(token).__name__}"
-                ) from None
+                )
+                break
             logger.debug("State: %d, Symbol: %s, Action: %s", state, key, action)
             match action:
                 case Shift(next=n):
                     if token is None:
-                        raise parsing_error("Unexpected end of input")
+                        error_message = "Unexpected end of input"
+                        break
                     state = n
                     stack.append(state)
                     symbols.append(token)
@@ -1554,10 +1546,22 @@ class Parser[T]:
 
                 case Accept(symbol):
                     if symbol != var:
-                        raise parsing_error(f"Unexpected symbol parsed: {symbol}")
+                        error_message = f"Unexpected symbol parsed: {symbol}"
+                        break
                     if token is not None:
-                        raise parsing_error(f"Unexpected token: {type(token).__name__}")
+                        error_message = f"Unexpected token: {type(token).__name__}"
+                        break
                     return symbols[-1]
 
                 case _:
-                    raise parsing_error(f"No action for state {state} and symbol {key}")
+                    error_message = f"No action for state {state} and symbol {key}"
+                    break
+
+        position = token if token is not None else last_token
+        raise ParsingError(
+            error_message,
+            token=token,
+            lineno=position.lineno if position is not None else 1,
+            offset=position.offset if position is not None else 0,
+            expected=self.table.expected_tokens(state),
+        ) from None
